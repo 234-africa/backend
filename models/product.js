@@ -58,7 +58,7 @@ const ProductSchema = new Schema(
       purchaseLimit: {
         type: Number,
         default: 10,
-        min: [1, "Purchase limit must be at least 1"],
+        min: [0, "Purchase limit must be at least 1"],
       },
     },
   ],
