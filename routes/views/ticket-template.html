@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Booking Confirmation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #222;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+        background: #fff;
+      margin: 0;
+  padding: 0;
+    }
+
+
+    .ticket-container {
+      width: 400px;
+      background: #fff;
+      padding: 20px;
+      border-left: 20px solid #e53012;
+      border-right: 20px solid #e53012;
+      border-top: 20px solid #007b3a;
+      border-bottom: 20px solid #007b3a;
+      color: #000;
+      margin: auto;
+    }
+
+    .ticket-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+    }
+
+    .date-box {
+      width: 60%;
+      border: 2px solid #555;
+      border-radius: 15px;
+      padding: 15px;
+      text-align: center;
+    }
+
+    .date-box .day {
+      font-size: 40px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .date-box .month {
+      font-size: 18px;
+      font-weight: 900;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    .date-box .time {
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 12px;
+    }
+
+    .date-box .booking-id-label {
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    .date-box .booking-id {
+      font-size: 14px;
+      font-weight: 900;
+      margin-top: 2px;
+    }
+
+    .qr-code img {
+      width: 120px;
+      height: 120px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .section-title::after {
+      content: '';
+      display: block;
+      width: 60%;
+      margin: 5px auto 0;
+      height: 2px;
+      background: #000;
+    }
+
+    .info-block {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+
+    .info-label {
+      background-color: #007b3a;
+      color: white;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .info-value {
+      border: 2px solid #000;
+      border-radius: 20px;
+      padding: 6px 12px;
+      min-width: 220px;
+      text-align: left;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .ticket-list-box {
+      border: 2px solid #000;
+      border-radius: 20px;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: bold;
+      font-size: 14px;
+      line-height: 1.6;
+      min-width: 220px;
+    }
+
+    .confirmation {
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 12px;
+      margin-top: 20px;
+    }
+
+    .logo {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .logo img {
+      height: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="ticket-container">
+    <div class="ticket-header">
+      <div class="date-box">
+        <div class="day">{{startDate}}</div>
+  
+        <div class="time">{{startTime}}</div>
+        <div class="booking-id-label">BOOKING ID</div>
+        <div class="booking-id">{{reference}}</div>
+      </div>
+      <div class="qr-code">
+        <img src="{{qrCode}}" alt="QR Code">
+      </div>
+    </div>
+
+    <div class="section-title">Booking Confirmation</div>
+
+    <div class="info-block">
+      <div class="info-label">NAME</div>
+      <div class="info-value">{{name}}</div>
+    </div>
+
+    <div class="info-block">
+      <div class="info-label">EMAIL</div>
+      <div class="info-value">{{email}}</div>
+    </div>
+
+    <div class="info-block">
+      <div class="info-label">AMOUNT</div>
+      <div class="info-value">₦{{price}}</div>
+    </div>
+
+    <div class="info-block">
+      <div class="info-label">TICKET</div>
+      <div class="ticket-list-box">{{tickets}}</div>
+    </div>
+
+    <div class="confirmation">
+      YOUR BOOKING FOR <strong>{{eventName}}</strong> HAS BEEN CONFIRMED
+    </div>
+
+    <div class="logo">
+      <img src="data:image/png;base64,{{logoBase64}}" alt="234 Africa Logo">
+    </div>
+  </div>
+</body>
+</html>
