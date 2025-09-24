@@ -129,8 +129,9 @@ router.post("/order", async (req, res) => {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     // ✅ Format date and tickets
-    const formattedDate = dayjs(startDate).format("MMM D, YYYY");
-    const formattedTime = dayjs(startDate).format("hh:mm A");
+    const formattedDate = dayjs(startDate).format("MMM D, YYYY"); // e.g., "Sep 28, 2025"
+    
+
     const ticketList = tickets
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
       .join("\n");
@@ -205,7 +206,7 @@ router.post("/order", async (req, res) => {
     doc
       .fontSize(12)
       .font("Helvetica")
-      .text(formattedTime, infoBoxX + 15, infoBoxY + 45, {
+      .text(startTime, infoBoxX + 15, infoBoxY + 45, {
         width: infoBoxW - 30,
         align: "center",
       });
@@ -378,7 +379,7 @@ router.post("/order", async (req, res) => {
           <p><strong>Reference:</strong> ${reference}</p>
           <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
           <p><strong>Total:</strong> ₦${price}</p>
-          <p><strong>Date:</strong> ${formattedDate} at ${formattedTime}</p>
+          <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
         </div>
       `,
     };
