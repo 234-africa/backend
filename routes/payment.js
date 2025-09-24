@@ -154,7 +154,6 @@ router.post("/order", async (req, res) => {
 
     const order = new Order(orderData);
     await order.save();
-
     // ✅ Generate PDF using PDFKit
     const doc = new PDFDocument({ size: [400, 530], margin: 0 });
     const chunks = [];

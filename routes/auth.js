@@ -4,6 +4,9 @@ const verifyToken = require("../middelwares/verify-token");
 const axios = require('axios');
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const Order = require("../models/order");
+const mongoose = require("mongoose");
+//const Payout = require("../models/payout");
 const {
   OAuth2Client
 } = require('google-auth-library');
@@ -125,6 +128,67 @@ router.post("/auth/login", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: err.message
+    });
+  }
+});
+
+
+// ✅ Payout route
+router.post("/users/:id/payout", async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const userId = req.params.id;
+
+    // 1️⃣ Validate request
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid payout amount",
+      });
+    }
+
+    // 2️⃣ Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 3️⃣ Check unpaid earnings (use your calculation)
+    const orders = await Order.aggregate([
+      { $match: { userId: user._id } },
+      { $group: { _id: null, totalEarnings: { $sum: "$price" } } },
+    ]);
+
+    const totalEarnings = orders.length ? orders[0].totalEarnings : 0;
+    const unpaidEarnings = totalEarnings - (user.totalPaidOut || 0);
+
+    if (amount > unpaidEarnings) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient unpaid earnings",
+      });
+    }
+
+    // 4️⃣ Update payout info
+    user.totalPaidOut = (user.totalPaidOut || 0) + amount;
+    user.payouts.push({ amount, date: new Date() });
+    await user.save();
+
+    // 5️⃣ Send success response
+    res.status(200).json({
+      success: true,
+      message: `₦${amount} paid out successfully`,
+      totalPaidOut: user.totalPaidOut,
+    });
+    console.log("✅ Payout successful");
+  } catch (err) {
+    console.error("Payout Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error, please try again later",
     });
   }
 });
@@ -400,18 +464,72 @@ router.put("/auth/user", verifyToken, async (req, res) => {
 
 router.get(`/users`, async (req, res) => {
   try {
+    // 1️⃣ Aggregate total earnings from orders
+    const earnings = await Order.aggregate([
+      {
+        $group: {
+          _id: "$userId",
+          totalEarnings: { $sum: "$price" },
+          orderCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // 2️⃣ Map earnings by userId
+    const earningsMap = {};
+    earnings.forEach((e) => {
+      earningsMap[e._id.toString()] = {
+        totalEarnings: e.totalEarnings,
+        orderCount: e.orderCount,
+      };
+    });
+
+    // 3️⃣ Fetch users from DB (including totalPaidOut & payouts)
     let users = await User.find();
+
+    // 4️⃣ Merge user data + earnings
+    let usersWithEarnings = users.map((user) => {
+      const e = earningsMap[user._id.toString()] || {
+        totalEarnings: 0,
+        orderCount: 0,
+      };
+      return {
+        _id: user._id,
+        name: user.name,
+        brand: user.brand,
+        email: user.email,
+        picture: user.picture,
+        role: user.role,
+        isVerified: user.isVerified,
+        createdAt: user.time,
+
+        // 🔑 Earnings info
+        totalEarnings: e.totalEarnings,
+        orderCount: e.orderCount,
+
+        // 🔑 From User schema
+        totalPaidOut: user.totalPaidOut || 0,
+        unpaidEarnings: e.totalEarnings - (user.totalPaidOut || 0),
+
+        // Optional: include payout history
+        payouts: user.payouts || [],
+      };
+    });
+
+    // 5️⃣ Sort by totalEarnings
+    usersWithEarnings.sort((a, b) => b.totalEarnings - a.totalEarnings);
 
     res.json({
       status: true,
-      users: users
+      users: usersWithEarnings,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
+ 
 
 module.exports = router;
