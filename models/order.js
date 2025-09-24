@@ -42,14 +42,12 @@ const OrderSchema = new mongoose.Schema({
   },
  affiliate: {
   type: String,
-  unique: true,
-  sparse: true,   // allows multiple docs without affiliate
+
 },
 
 promoCode: {
   type: String,
-  unique: true,
-  sparse: true,   // allows multiple docs without promoCode
+ 
 },
 
   scanned: {
