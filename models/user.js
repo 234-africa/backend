@@ -22,6 +22,7 @@ const UserSchema = new Schema({
     type: String,
     trim: true,
     unique: true,
+    lowercase: true,
     required: true
   },
   role: { type: String, enum: ["user", "admin"], default: "user" },
@@ -52,30 +53,27 @@ UserSchema.virtual("unpaidEarnings").get(function () {
 // Create unique index for the email field
 UserSchema.plugin(uniqueValidator);
 
-// Password hashing
 UserSchema.pre("save", function (next) {
   let user = this;
 
-  // ✅ Extra: Force role from ADMIN_EMAILS in .env
+  // ✅ Normalize emails for case-insensitive comparison
   const adminEmails = process.env.ADMIN_EMAILS
-    ? process.env.ADMIN_EMAILS.split(",")
+    ? process.env.ADMIN_EMAILS.split(",").map(email => email.trim().toLowerCase())
     : [];
 
-  if (adminEmails.includes(user.email)) {
+  const normalizedUserEmail = user.email.trim().toLowerCase();
+
+  if (adminEmails.includes(normalizedUserEmail)) {
     user.role = "admin";
   }
 
   // ✅ Your original password hashing logic
   if (this.isModified("password") || this.isNew) {
     bcrypt.genSalt(10, function (err, salt) {
-      if (err) {
-        return next(err);
-      }
+      if (err) return next(err);
 
       bcrypt.hash(user.password, salt, null, function (err, hash) {
-        if (err) {
-          return next(err);
-        }
+        if (err) return next(err);
 
         user.password = hash;
         next();

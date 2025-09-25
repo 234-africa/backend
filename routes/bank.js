@@ -95,7 +95,11 @@ router.delete(`/bank/:id`,verifyToken, async (req, res) => {
 });
 router.get("/all-banks", async (req, res) => {
   try {
-    const banks = await Bank.find(); // get all orders
+    const banks = await Bank.find()
+      .populate({
+        path: "user",
+        select: "email"  // only get email from user
+      });
 
     res.json({
       success: true,
