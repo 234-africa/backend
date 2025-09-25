@@ -130,7 +130,6 @@ router.post("/order", async (req, res) => {
 
     // ✅ Format date and tickets
     const formattedDate = dayjs(startDate).format("MMM D, YYYY"); // e.g., "Sep 28, 2025"
-    
 
     const ticketList = tickets
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
@@ -331,16 +330,18 @@ router.post("/order", async (req, res) => {
 
     // ✅ Email setup - FIXED: createTransport not createTransporter
     const mailTransporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "mail.privateemail.com", // Namecheap Private Email SMTP host
+      port: 465,
+      secure: true,
       auth: {
-        user: process.env.GOOGLE_APP_EMAIL,
-        pass: process.env.GOOGLE_APP_PW,
+        user: process.env.GOOGLE_APP_EMAIL, // should be info@234tickets.live
+        pass: process.env.GOOGLE_APP_PW, // your mailbox password
       },
     });
 
     // ✅ Email to customer with PDF
     const customerEmail = {
-      from: process.env.GOOGLE_APP_EMAIL,
+      from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
       to: contact.email,
       subject: "🎟️ Your Ticket Order Confirmation",
       html: `
@@ -366,7 +367,7 @@ router.post("/order", async (req, res) => {
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
       .join("<br>");
     const ownerEmail = {
-      from: process.env.GOOGLE_APP_EMAIL,
+      from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
       to: user.email,
       subject: `📢 New Ticket Order for ${title}`,
       html: `
