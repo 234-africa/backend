@@ -9,6 +9,8 @@ const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
 const { runCleanups } =  require("./routes/cron");
+const path = require('path');
+const prerender = require('prerender-node');
 
 
 // Load passport config
@@ -27,12 +29,21 @@ app.use(
     saveUninitialized: false,
   })
 );
+prerender.set('prerenderToken', '1vuymwffprVVOF6d4Odt');
+app.use(prerender);
 app.use(morgan("combined"));
 app.use(bodyParser.json());
 app.use(cors());
 app.use(cookieParser());
 app.use(passport.initialize());
 app.use(passport.session());
+// Serve static files from dist/
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Fallback to index.html for SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
 // ------------------- Auth Guard ------------------- //
 function isLoggedIn(req, res, next) {
