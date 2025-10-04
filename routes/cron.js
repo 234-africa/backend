@@ -39,7 +39,7 @@ async function deleteExpiredPromoCodes() {
 
 // Run cleanup immediately on startup (optional)
 async function runCleanups() {
-  await deleteExpiredProducts();
+ // await deleteExpiredProducts();
   await deleteExpiredPromoCodes();
 }
 

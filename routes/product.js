@@ -140,15 +140,23 @@ router.get("/user/products", verifyToken, async (req, res) => {
   }
 });
 router.get(`/products`, async (req, res) => {
-  let filter = {};
   try {
-    let products = await Product.find(filter).populate("category").exec();
+    const now = new Date();
+
+    const filter = {
+      "event.start": { $gt: now }  // Only get products whose event hasn't started
+    };
+
+    const products = await Product.find(filter)
+      .populate("category")
+      .exec();
+
     res.json({
       status: true,
       products: products,
     });
   } catch (error) {
-    ////console.log(error);
+    console.error(error);
     res.status(500).json({ success: false });
   }
 });
