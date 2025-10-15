@@ -139,12 +139,13 @@ router.get("/user/products", verifyToken, async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
-router.get(`/products`, async (req, res) => {
+router.get("/products", async (req, res) => {
   try {
     const now = new Date();
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000); // subtract 12 hours
 
     const filter = {
-      "event.start": { $gt: now }  // Only get products whose event hasn't started
+      "event.start": { $gt: twelveHoursAgo } // started within last 12h OR in future
     };
 
     const products = await Product.find(filter)
@@ -153,13 +154,14 @@ router.get(`/products`, async (req, res) => {
 
     res.json({
       status: true,
-      products: products,
+      products,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false });
+    console.error("❌ Error fetching products:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 
 router.get("/categories/:categoryType", async (req, res) => {
