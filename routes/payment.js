@@ -115,6 +115,56 @@ router.post("/order", async (req, res) => {
   console.log("📦 Order request:", req.body);
 
   try {
+    // ✅ CRITICAL FIX 1: Check if order already exists (idempotency)
+    const existingOrder = await Order.findOne({ reference });
+    if (existingOrder) {
+      console.log("⚠️ Order already exists for reference:", reference);
+      return res.status(200).json({
+        success: true,
+        message: "Order already processed",
+        order: existingOrder,
+      });
+    }
+
+    // ✅ CRITICAL FIX 2: Verify payment with Paystack (only for paid orders)
+    if (price > 0) {
+      try {
+        const verifyResponse = await axios.get(
+          `https://api.paystack.co/transaction/verify/${reference}`,
+          {
+            headers: {
+              Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+            },
+          }
+        );
+
+        const paymentStatus = verifyResponse.data?.data?.status;
+        const paidAmount = verifyResponse.data?.data?.amount / 100; // Convert from kobo to naira
+
+        if (paymentStatus !== "success") {
+          console.error("❌ Payment not successful:", paymentStatus);
+          return res.status(400).json({
+            error: "Payment verification failed. Payment status: " + paymentStatus,
+          });
+        }
+
+        // Optional: Verify amount matches
+        if (Math.abs(paidAmount - price) > 1) {
+          console.error("❌ Amount mismatch:", { expected: price, paid: paidAmount });
+          return res.status(400).json({
+            error: "Payment amount does not match order total",
+          });
+        }
+
+        console.log("✅ Payment verified successfully:", reference);
+      } catch (verifyError) {
+        console.error("❌ Payment verification error:", verifyError.response?.data || verifyError.message);
+        return res.status(400).json({
+          error: "Failed to verify payment with Paystack",
+        });
+      }
+    }
+
     // ✅ Apply promo code usage
     if (promoCode) {
       const promo = await PromoCode.findOne({ code: promoCode.toUpperCase() });
@@ -135,7 +185,7 @@ router.post("/order", async (req, res) => {
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
       .join("\n");
 
-    // ✅ Save Order first
+    // ✅ Prepare Order data (but don't save yet)
     const orderData = {
       title,
       reference,
@@ -150,9 +200,6 @@ router.post("/order", async (req, res) => {
     };
     if (affiliate) orderData.affiliate = affiliate;
     if (promoCode) orderData.promoCode = promoCode;
-
-    const order = new Order(orderData);
-    await order.save();
     // ✅ Generate PDF using PDFKit
     const doc = new PDFDocument({ size: [400, 530], margin: 0 });
     const chunks = [];
@@ -385,6 +432,11 @@ router.post("/order", async (req, res) => {
     };
 
     await mailTransporter.sendMail(ownerEmail);
+
+    // ✅ CRITICAL FIX 3: Save Order ONLY after successful email delivery
+    const order = new Order(orderData);
+    await order.save();
+    console.log("✅ Order saved successfully after email delivery:", reference);
 
     // ✅ Reduce ticket quantity correctly
     const product = await Product.findOne({ title, user: userId });
