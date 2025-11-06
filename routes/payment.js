@@ -17,14 +17,17 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; // Replace with you
 // ✅ Initialize transaction
 // ✅ Initialize Payment
 router.post("/initialize", async (req, res) => {
-  const { email, amount } = req.body;
+  const { email, amount, currency = "NGN" } = req.body;
 
   try {
+    const multiplier = currency === "NGN" ? 100 : 100;
+    
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
         email,
-        amount: amount * 100, // Convert Naira to Kobo
+        amount: amount * multiplier,
+        currency: currency,
         callback_url: `${process.env.FRONTEND_URL}/payment-success`,
       },
       {
@@ -110,6 +113,7 @@ router.post("/order", async (req, res) => {
     title,
     affiliate,
     promoCode,
+    currency = "NGN",
   } = req.body;
 
   console.log("📦 Order request:", req.body);
@@ -141,7 +145,8 @@ router.post("/order", async (req, res) => {
       );
 
       const paymentStatus = verifyResponse.data?.data?.status;
-      const paidAmount = verifyResponse.data?.data?.amount / 100; // Convert from kobo to naira
+      const paidAmount = verifyResponse.data?.data?.amount / 100;
+      const verifiedCurrency = verifyResponse.data?.data?.currency || currency;
 
       if (paymentStatus !== "success") {
         console.error("❌ Payment not successful:", paymentStatus);
@@ -194,6 +199,7 @@ router.post("/order", async (req, res) => {
       startTime,
       location,
       price: verifiedPaidAmount, // ✅ Use Paystack verified amount, not client price
+      currency: currency,
       createdAt: moment().format(),
     };
     if (affiliate) orderData.affiliate = affiliate;
@@ -338,7 +344,15 @@ router.post("/order", async (req, res) => {
     currentY += 50;
     drawField("EMAIL", contact.email, currentY);
     currentY += 50;
-    drawField("AMOUNT", `\u20A6${verifiedPaidAmount}`, currentY);
+    const currencySymbols = {
+      NGN: "\u20A6",
+      USD: "$",
+      GBP: "\u00A3",
+      EUR: "\u20AC",
+      GHS: "\u20B5"
+    };
+    const currencySymbol = currencySymbols[currency] || currency + " ";
+    drawField("AMOUNT", `${currencySymbol}${verifiedPaidAmount}`, currentY);
 
     currentY += 50;
     drawField("TICKET", ticketList, currentY, true);
