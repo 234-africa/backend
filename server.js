@@ -1,3 +1,4 @@
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
@@ -48,7 +49,6 @@ const bankRoutes = require("./routes/bank");
 const affiliateRoutes = require("./routes/affiliate");
 const orderRoutes = require("./routes/order");
 const promoRoutes = require("./routes/promoCode");
-const sitemapRoutes = require("./routes/sitemap");
 
 app.use("/api", productsRoutes);
 app.use("/api", staffRoutes);
@@ -59,7 +59,6 @@ app.use("/api", affiliateRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api", orderRoutes);
 app.use("/api", promoRoutes);
-app.use("/", sitemapRoutes);
 
 // ------------------- DB Connection ------------------- //
 mongoose
