@@ -82,7 +82,9 @@ async function deleteExpiredPromoCodes() {
 
 // Run cleanup immediately on startup (optional)
 async function runCleanups() {
-  await deleteExpiredProducts();
+  // NOTE: Events are NOT deleted automatically. They are only hidden from public view.
+  // Only organizers can delete their own events.
+  // await deleteExpiredProducts(); // DISABLED - events should not be auto-deleted
   await deleteExpiredPromoCodes();
 }
 
