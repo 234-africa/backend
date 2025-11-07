@@ -17,23 +17,16 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; // Replace with you
 // ✅ Initialize transaction
 // ✅ Initialize Payment
 router.post("/initialize", async (req, res) => {
-  const { email, amount, currency } = req.body;
+  const { email, amount } = req.body;
 
   try {
-    const paymentData = {
-      email,
-      amount: amount * 100, // Convert to smallest currency unit
-      callback_url: `${process.env.FRONTEND_URL}/payment-success`,
-    };
-
-    // Add currency if provided (Paystack supports NGN, USD, GHS, etc.)
-    if (currency && currency !== "NGN") {
-      paymentData.currency = currency;
-    }
-
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
-      paymentData,
+      {
+        email,
+        amount: amount * 100, // Convert Naira to Kobo
+        callback_url: `${process.env.FRONTEND_URL}/payment-success`,
+      },
       {
         headers: {
           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
@@ -117,59 +110,11 @@ router.post("/order", async (req, res) => {
     title,
     affiliate,
     promoCode,
-    currency,
   } = req.body;
 
   console.log("📦 Order request:", req.body);
 
   try {
-    // ✅ CRITICAL FIX 1: Check if order already exists (idempotency)
-    const existingOrder = await Order.findOne({ reference });
-    if (existingOrder) {
-      console.log("⚠️ Order already exists for reference:", reference);
-      return res.status(200).json({
-        success: true,
-        message: "Order already processed",
-        order: existingOrder,
-      });
-    }
-
-    // ✅ CRITICAL FIX 2: Verify payment with Paystack (ALWAYS when reference exists)
-    let verifiedPaidAmount = 0;
-    
-    // Try to verify with Paystack - this determines if it's a paid or free order
-    try {
-      const verifyResponse = await axios.get(
-        `https://api.paystack.co/transaction/verify/${reference}`,
-        {
-          headers: {
-            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-          },
-        }
-      );
-
-      const paymentStatus = verifyResponse.data?.data?.status;
-      const paidAmount = verifyResponse.data?.data?.amount / 100; // Convert from kobo to naira
-
-      if (paymentStatus !== "success") {
-        console.error("❌ Payment not successful:", paymentStatus);
-        return res.status(400).json({
-          error: "Payment verification failed. Payment status: " + paymentStatus,
-        });
-      }
-
-      // ✅ Use Paystack's verified amount as source of truth
-      verifiedPaidAmount = paidAmount;
-      console.log("✅ Payment verified successfully:", reference);
-      console.log(`💰 Verified payment amount: ₦${paidAmount}`);
-      
-    } catch (verifyError) {
-      // ✅ If Paystack verification fails, this is a free ticket (no payment)
-      // Free tickets use a generated reference not in Paystack system
-      console.log("ℹ️ No Paystack transaction found - treating as free ticket");
-      verifiedPaidAmount = 0;
-    }
-
     // ✅ Apply promo code usage
     if (promoCode) {
       const promo = await PromoCode.findOne({ code: promoCode.toUpperCase() });
@@ -190,8 +135,7 @@ router.post("/order", async (req, res) => {
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
       .join("\n");
 
-    // ✅ Prepare Order data (but don't save yet)
-    // Use verified payment amount from Paystack as source of truth
+    // ✅ Save Order first
     const orderData = {
       title,
       reference,
@@ -201,12 +145,14 @@ router.post("/order", async (req, res) => {
       startDate,
       startTime,
       location,
-      price: verifiedPaidAmount, // ✅ Use Paystack verified amount, not client price
-      currency: currency || "NGN", // ✅ Store currency used for payment
+      price,
       createdAt: moment().format(),
     };
     if (affiliate) orderData.affiliate = affiliate;
     if (promoCode) orderData.promoCode = promoCode;
+
+    const order = new Order(orderData);
+    await order.save();
     // ✅ Generate PDF using PDFKit
     const doc = new PDFDocument({ size: [400, 530], margin: 0 });
     const chunks = [];
@@ -347,7 +293,7 @@ router.post("/order", async (req, res) => {
     currentY += 50;
     drawField("EMAIL", contact.email, currentY);
     currentY += 50;
-    drawField("AMOUNT", `\u20A6${verifiedPaidAmount}`, currentY);
+    drawField("AMOUNT", `\u20A6${price}`, currentY);
 
     currentY += 50;
     drawField("TICKET", ticketList, currentY, true);
@@ -382,12 +328,6 @@ router.post("/order", async (req, res) => {
     doc.end();
     const pdfBuffer = await pdfPromise;
 
-    // ✅ CRITICAL FIX: Save Order FIRST after payment verification (before email)
-    // This ensures payment is never lost even if email fails
-    const order = new Order(orderData);
-    await order.save();
-    console.log("✅ Order saved successfully after payment verification:", reference);
-
     // ✅ Email setup - FIXED: createTransport not createTransporter
     const mailTransporter = nodemailer.createTransport({
       host: "mail.privateemail.com", // Namecheap Private Email SMTP host
@@ -399,79 +339,52 @@ router.post("/order", async (req, res) => {
       },
     });
 
-    // ✅ Send emails - wrapped in try-catch to prevent order failure if email fails
-    let emailStatus = { customer: false, owner: false, error: null };
-    
-    try {
-      // ✅ Email to customer with PDF
-      const customerEmail = {
-        from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
-        to: contact.email,
-        subject: "🎟️ Your Ticket Order Confirmation",
-        html: `
-          <div style="font-family: Arial; line-height: 1.6;">
-            <h2>🎉 Your ticket for <strong>${title}</strong> is confirmed!</h2>
-            <p><strong>Reference:</strong> ${reference}</p>
-            <p>Your ticket is attached as a PDF.</p>
-          </div>
-        `,
-        attachments: [
-          {
-            filename: `ticket-${reference}.pdf`,
-            content: pdfBuffer,
-            contentType: "application/pdf",
-          },
-        ],
-      };
+    // ✅ Email to customer with PDF
+    const customerEmail = {
+      from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
+      to: contact.email,
+      subject: "🎟️ Your Ticket Order Confirmation",
+      html: `
+        <div style="font-family: Arial; line-height: 1.6;">
+          <h2>🎉 Your ticket for <strong>${title}</strong> is confirmed!</h2>
+          <p><strong>Reference:</strong> ${reference}</p>
+          <p>Your ticket is attached as a PDF.</p>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `ticket-${reference}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    };
 
-      await mailTransporter.sendMail(customerEmail);
-      emailStatus.customer = true;
-      console.log("✅ Customer email sent successfully to:", contact.email);
+    await mailTransporter.sendMail(customerEmail);
 
-      // ✅ Email to event owner without PDF
-      const ticketListHtml = tickets
-        .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
-        .join("<br>");
-      const ownerEmail = {
-        from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
-        to: user.email,
-        subject: `📢 New Ticket Order for ${title}`,
-        html: `
-          <div style="font-family: Arial; line-height: 1.6;">
-            <h2>📢 New order received for your event: <strong>${title}</strong></h2>
-            <p><strong>Customer:</strong> ${contact.name || user.name} (${
-          contact.email
-        })</p>
-            <p><strong>Reference:</strong> ${reference}</p>
-            <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
-            <p><strong>Total:</strong> ₦${verifiedPaidAmount}</p>
-            <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
-          </div>
-        `,
-      };
+    // ✅ Email to event owner without PDF
+    const ticketListHtml = tickets
+      .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
+      .join("<br>");
+    const ownerEmail = {
+      from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
+      to: user.email,
+      subject: `📢 New Ticket Order for ${title}`,
+      html: `
+        <div style="font-family: Arial; line-height: 1.6;">
+          <h2>📢 New order received for your event: <strong>${title}</strong></h2>
+          <p><strong>Customer:</strong> ${contact.name || user.name} (${
+        contact.email
+      })</p>
+          <p><strong>Reference:</strong> ${reference}</p>
+          <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
+          <p><strong>Total:</strong> ₦${price}</p>
+          <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
+        </div>
+      `,
+    };
 
-      await mailTransporter.sendMail(ownerEmail);
-      emailStatus.owner = true;
-      console.log("✅ Owner email sent successfully to:", user.email);
-
-    } catch (emailError) {
-      // ✅ Log email error but DON'T fail the order (payment already successful)
-      console.error("❌ EMAIL SENDING FAILED:", emailError);
-      console.error("Email error details:", {
-        message: emailError.message,
-        code: emailError.code,
-        command: emailError.command,
-        response: emailError.response,
-        customerEmailSent: emailStatus.customer,
-        ownerEmailSent: emailStatus.owner,
-        reference: reference,
-        customerEmail: contact.email,
-        ownerEmail: user.email,
-      });
-      emailStatus.error = emailError.message;
-      
-      // Continue execution - order is already saved
-    }
+    await mailTransporter.sendMail(ownerEmail);
 
     // ✅ Reduce ticket quantity correctly
     const product = await Product.findOne({ title, user: userId });
@@ -511,20 +424,11 @@ router.post("/order", async (req, res) => {
       );
     }
 
-    // ✅ Response with email status
-    const responseMessage = emailStatus.error
-      ? "Order saved and tickets updated. Email delivery encountered issues - please check logs."
-      : "Order saved, emails sent successfully, and tickets updated.";
-    
+    // ✅ Response
     res.status(201).json({
       success: true,
-      message: responseMessage,
+      message: "Order saved, emails sent, and tickets updated.",
       order,
-      emailStatus: {
-        customerEmailSent: emailStatus.customer,
-        ownerEmailSent: emailStatus.owner,
-        emailError: emailStatus.error,
-      },
     });
   } catch (error) {
     console.error("❌ Order processing error:", error);
@@ -533,4 +437,3 @@ router.post("/order", async (req, res) => {
 });
 
 module.exports = router;
-  
