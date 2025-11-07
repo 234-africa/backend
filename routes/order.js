@@ -129,7 +129,7 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
 router.get("/orders", verifyToken, async (req, res) => {
   try {
     const userId = req.decoded._id; // from token
-    const orders = await Order.find({ userId: userId });
+    const orders = await Order.find({ userId: userId }).sort({ createdAt: -1 });
     ////console.log(orders);
     ////console.log(userId);
     res.json({
@@ -144,7 +144,7 @@ router.get("/orders", verifyToken, async (req, res) => {
 });
 router.get("/all-orders", async (req, res) => {
   try {
-    const orders = await Order.find(); // get all orders
+    const orders = await Order.find().sort({ createdAt: -1 }); // get all orders sorted by latest first
 
     res.json({
       success: true,
