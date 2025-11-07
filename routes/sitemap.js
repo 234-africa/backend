@@ -35,6 +35,18 @@ router.get("/sitemap.xml", async (req, res) => {
     sitemap += `    <priority>0.7</priority>\n`;
     sitemap += `  </url>\n`;
 
+    sitemap += `  <url>\n`;
+    sitemap += `    <loc>${baseUrl}/login</loc>\n`;
+    sitemap += `    <changefreq>monthly</changefreq>\n`;
+    sitemap += `    <priority>0.6</priority>\n`;
+    sitemap += `  </url>\n`;
+
+    sitemap += `  <url>\n`;
+    sitemap += `    <loc>${baseUrl}/register</loc>\n`;
+    sitemap += `    <changefreq>monthly</changefreq>\n`;
+    sitemap += `    <priority>0.6</priority>\n`;
+    sitemap += `  </url>\n`;
+
     products.forEach((product) => {
       const eventSlug = encodeURIComponent(product.customizeUrl || product.title.replace(/\s+/g, "-").toLowerCase());
       const lastmod = product.time ? new Date(product.time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
