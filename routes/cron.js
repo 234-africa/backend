@@ -6,11 +6,10 @@ const PromoCode = require("../models/promoCode");  // adjust path
 async function deleteExpiredProducts() {
   try {
     const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000));
     const result = await Product.deleteMany({
-      "event.start": { $lt: twelveHoursAgo }
+      "event.start": { $lt: now }
     });
-    console.log(`🧹 Deleted ${result.deletedCount} expired products (12 hours after start time).`);
+    console.log(`🧹 Deleted ${result.deletedCount} expired products.`);
   } catch (err) {
     console.error("Error deleting expired products:", err);
   }
@@ -40,7 +39,7 @@ async function deleteExpiredPromoCodes() {
 
 // Run cleanup immediately on startup (optional)
 async function runCleanups() {
-  await deleteExpiredProducts();
+ // await deleteExpiredProducts();
   await deleteExpiredPromoCodes();
 }
 
