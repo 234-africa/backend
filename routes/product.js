@@ -87,6 +87,7 @@ router.post(
       product.title = req.body.title;
       product.customizeUrl = req.body.customizeUrl;
       product.user = req.decoded._id;
+      product.currency = req.body.currency || "NGN";
       product.event = {
         start: new Date(req.body.eventDate),
 
@@ -141,16 +142,35 @@ router.get("/user/products", verifyToken, async (req, res) => {
 });
 router.get("/products", async (req, res) => {
   try {
-    const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000); // subtract 12 hours
-
-    const filter = {
-      "event.start": { $gt: twelveHoursAgo } // started within last 12h OR in future
-    };
-
-    const products = await Product.find(filter)
+    const moment = require("moment-timezone");
+    
+    const allProducts = await Product.find()
       .populate("category")
       .exec();
+
+    const products = allProducts.filter((product) => {
+      if (!product.event || !product.event.start) return false;
+
+      const eventTimezone = product.event.timezone || "UTC";
+      const eventStartTime = product.event.startTime || "00:00";
+      
+      const eventStartDate = moment.tz(product.event.start, eventTimezone);
+      
+      if (eventStartTime) {
+        const [hours, minutes] = eventStartTime.split(":");
+        eventStartDate.set({
+          hour: parseInt(hours, 10),
+          minute: parseInt(minutes, 10),
+          second: 0
+        });
+      }
+
+      const expirationTime = eventStartDate.clone().add(12, "hours");
+      
+      const nowInEventTimezone = moment.tz(eventTimezone);
+
+      return nowInEventTimezone.isBefore(expirationTime);
+    });
 
     res.json({
       status: true,
@@ -268,6 +288,7 @@ router.put(
       updateData.category = req.body.categoryID;
       updateData.user = req.decoded._id;
       updateData.tag = req.body.tag?.split(",") || [];
+      updateData.currency = req.body.currency || "NGN";
 
       // Event information
       updateData.event = {
