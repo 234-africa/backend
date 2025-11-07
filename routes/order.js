@@ -8,60 +8,6 @@ const fs = require("fs");
 
 const path = require("path");
 const PDFDocument = require("pdfkit-table");
-const XLSX = require("xlsx");
-
-router.get("/orders/download-excel", verifyToken, async (req, res) => {
-  try {
-    const userId = req.decoded._id;
-    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
-
-    if (!orders.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No orders found",
-      });
-    }
-
-    const currencySymbols = {
-      NGN: "₦",
-      USD: "$",
-      GBP: "£",
-      EUR: "€",
-      GHS: "₵"
-    };
-
-    const worksheetData = [
-      ["ORDER ID", "DATE", "REFERENCE", "EVENT", "CUSTOMER EMAIL", "PHONE", "AMOUNT", "CURRENCY"]
-    ];
-
-    orders.forEach((order) => {
-      const currencySymbol = currencySymbols[order.currency] || order.currency;
-      worksheetData.push([
-        order._id.toString(),
-        new Date(order.createdAt).toLocaleString(),
-        order.reference || "N/A",
-        order.title || "N/A",
-        order.contact?.email || "N/A",
-        order.contact?.phone || "N/A",
-        `${currencySymbol}${(order.price || 0).toLocaleString()}`,
-        order.currency || "NGN"
-      ]);
-    });
-
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-
-    const excelBuffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-
-    res.setHeader("Content-Disposition", `attachment; filename=orders_${userId}.xlsx`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(excelBuffer);
-  } catch (err) {
-    console.error("❌ Excel export error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
 
 router.get("/orders/download-and-email", verifyToken, async (req, res) => {
   try {
@@ -183,7 +129,7 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
 router.get("/orders", verifyToken, async (req, res) => {
   try {
     const userId = req.decoded._id; // from token
-    const orders = await Order.find({ userId: userId }).sort({ createdAt: -1 });
+    const orders = await Order.find({ userId: userId });
     ////console.log(orders);
     ////console.log(userId);
     res.json({
@@ -198,7 +144,7 @@ router.get("/orders", verifyToken, async (req, res) => {
 });
 router.get("/all-orders", async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 }); // get all orders, latest first
+    const orders = await Order.find(); // get all orders
 
     res.json({
       success: true,
