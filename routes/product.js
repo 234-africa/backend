@@ -1,6 +1,7 @@
 const Product = require("../models/product");
 const express = require("express");
 const Category = require("../models/category");
+const moment = require("moment-timezone");
 
 const upload = require("../middelwares/upload-photo");
 const verifyToken = require("../middelwares/verify-token");
@@ -9,6 +10,42 @@ const app = express();
 const cookieParser = require("cookie-parser");
 
 app.use(cookieParser());
+
+function filterExpiredEvents(products) {
+  const now = moment();
+  
+  return products.filter(product => {
+    if (!product.event || !product.event.start) return false;
+
+    const eventTimezone = product.event.timezone || 'UTC';
+    let eventStartMoment;
+
+    if (product.event.startTime && /^\d{2}:\d{2}$/.test(product.event.startTime)) {
+      const eventDate = moment(product.event.start).format('YYYY-MM-DD');
+      const eventTime = product.event.startTime;
+
+      eventStartMoment = moment.tz(
+        `${eventDate} ${eventTime}`,
+        'YYYY-MM-DD HH:mm',
+        eventTimezone
+      );
+
+      if (!eventStartMoment.isValid()) {
+        console.warn(`Invalid event start time for product ${product._id}, falling back to event.start`);
+        eventStartMoment = moment(product.event.start).tz(eventTimezone);
+      }
+    } else {
+      if (product.event.startTime) {
+        console.warn(`Invalid startTime format for product ${product._id}: ${product.event.startTime}, falling back to event.start`);
+      }
+      eventStartMoment = moment(product.event.start).tz(eventTimezone);
+    }
+
+    const expirationTime = eventStartMoment.clone().add(12, 'hours');
+
+    return now.isBefore(expirationTime);
+  });
+}
 router.post("/upload", upload.array("photos", 3), function (req, res, next) {
   res.send({
     data: req.files,
@@ -46,6 +83,14 @@ router.get("/product/:idOrSlug", async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Product not found",
+      });
+    }
+
+    const activeProducts = filterExpiredEvents([product]);
+    if (activeProducts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Event has expired",
       });
     }
 
@@ -141,20 +186,15 @@ router.get("/user/products", verifyToken, async (req, res) => {
 });
 router.get("/products", async (req, res) => {
   try {
-    const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000); // subtract 12 hours
-
-    const filter = {
-      "event.start": { $gt: twelveHoursAgo } // started within last 12h OR in future
-    };
-
-    const products = await Product.find(filter)
+    const allProducts = await Product.find()
       .populate("category")
       .exec();
 
+    const activeProducts = filterExpiredEvents(allProducts);
+
     res.json({
       status: true,
-      products,
+      products: activeProducts,
     });
   } catch (error) {
     console.error("❌ Error fetching products:", error);
@@ -166,15 +206,8 @@ router.get("/products", async (req, res) => {
 
 router.get("/categories/:categoryType", async (req, res) => {
   try {
-    // Get the category type from the URL
     let categoryType = req.params.categoryType;
 
-    // Replace dashes with spaces to match the category in the database
-    // categoryType = categoryType.replace(/-/g, ' ');
-
-    ////console.log("Fetching category:", categoryType);
-
-    // Find the category by type in the database
     const category = await Category.findOne({ type: categoryType });
 
     if (!category) {
@@ -183,10 +216,13 @@ router.get("/categories/:categoryType", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
-    // Fetch the products under this category
-    const products = await Product.find({ category: category._id });
+    const allProducts = await Product.find({ 
+      category: category._id
+    });
 
-    res.json({ success: true, products });
+    const activeProducts = filterExpiredEvents(allProducts);
+
+    res.json({ success: true, products: activeProducts });
   } catch (error) {
     console.error("Error fetching products:", error);
     res.status(500).json({ success: false, message: error.message });
