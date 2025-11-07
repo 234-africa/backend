@@ -328,28 +328,71 @@ router.post("/order", async (req, res) => {
     doc.end();
     const pdfBuffer = await pdfPromise;
 
-    // ✅ Email setup - FIXED: createTransport not createTransporter
+    // ✅ Email setup with connection pooling for faster delivery
     const mailTransporter = nodemailer.createTransport({
-      host: "mail.privateemail.com", // Namecheap Private Email SMTP host
+      host: "mail.privateemail.com",
       port: 465,
       secure: true,
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
       auth: {
-        user: process.env.GOOGLE_APP_EMAIL, // should be info@234tickets.live
-        pass: process.env.GOOGLE_APP_PW, // your mailbox password
+        user: process.env.GOOGLE_APP_EMAIL,
+        pass: process.env.GOOGLE_APP_PW,
       },
     });
 
-    // ✅ Email to customer with PDF
+    // ✅ Email to customer with enhanced HTML template
     const customerEmail = {
       from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
       to: contact.email,
       subject: "🎟️ Your Ticket Order Confirmation",
+      text: `Your ticket for ${title} is confirmed!\n\nReference: ${reference}\n\nYour ticket is attached as a PDF.\n\nThank you for your purchase!\n\n234 Tickets`,
       html: `
-        <div style="font-family: Arial; line-height: 1.6;">
-          <h2>🎉 Your ticket for <strong>${title}</strong> is confirmed!</h2>
-          <p><strong>Reference:</strong> ${reference}</p>
-          <p>Your ticket is attached as a PDF.</p>
-        </div>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f4f4f4;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px 0;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 40px 30px; text-align: center; background-color: #228B22; border-radius: 8px 8px 0 0;">
+                      <h1 style="margin: 0; color: #ffffff; font-size: 28px;">🎉 Ticket Confirmed!</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 30px; color: #333333; font-size: 16px; line-height: 1.6;">
+                      <p style="margin: 0 0 20px 0;">Dear Customer,</p>
+                      <p style="margin: 0 0 20px 0;">Your ticket for <strong style="color: #228B22;">${title}</strong> has been confirmed!</p>
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0; background-color: #f9f9f9; border-radius: 6px;">
+                        <tr>
+                          <td style="padding: 20px;">
+                            <p style="margin: 0 0 10px 0;"><strong>Booking Reference:</strong></p>
+                            <p style="margin: 0; font-size: 20px; color: #228B22; font-weight: bold;">${reference}</p>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin: 20px 0;">Your ticket is attached to this email as a PDF. Please present it at the event entrance.</p>
+                      <p style="margin: 20px 0;">Thank you for your purchase!</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 20px 30px; text-align: center; background-color: #f4f4f4; border-radius: 0 0 8px 8px; font-size: 14px; color: #666666;">
+                      <p style="margin: 0;">234 Tickets - Your Premier Event Ticketing Platform</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
       `,
       attachments: [
         {
@@ -362,25 +405,88 @@ router.post("/order", async (req, res) => {
 
     await mailTransporter.sendMail(customerEmail);
 
-    // ✅ Email to event owner without PDF
+    // ✅ Email to event owner with enhanced template
     const ticketListHtml = tickets
+      .map((t) => `<li style="margin: 5px 0;">${t.name.toUpperCase()} x${t.quantity}</li>`)
+      .join("");
+    const ticketListText = tickets
       .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
-      .join("<br>");
+      .join("\n");
     const ownerEmail = {
       from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
       to: user.email,
       subject: `📢 New Ticket Order for ${title}`,
+      text: `New order received for your event: ${title}\n\nCustomer: ${contact.name || user.name} (${contact.email})\nReference: ${reference}\n\nTickets:\n${ticketListText}\n\nTotal: ₦${price}\nDate: ${formattedDate} at ${startTime}\n\n234 Tickets`,
       html: `
-        <div style="font-family: Arial; line-height: 1.6;">
-          <h2>📢 New order received for your event: <strong>${title}</strong></h2>
-          <p><strong>Customer:</strong> ${contact.name || user.name} (${
-        contact.email
-      })</p>
-          <p><strong>Reference:</strong> ${reference}</p>
-          <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
-          <p><strong>Total:</strong> ₦${price}</p>
-          <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
-        </div>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f4f4f4;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px 0;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 40px 30px; text-align: center; background-color: #DC143C; border-radius: 8px 8px 0 0;">
+                      <h1 style="margin: 0; color: #ffffff; font-size: 28px;">📢 New Order Received!</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 30px; color: #333333; font-size: 16px; line-height: 1.6;">
+                      <p style="margin: 0 0 20px 0;">Hello Event Organizer,</p>
+                      <p style="margin: 0 0 20px 0;">You have received a new order for <strong style="color: #DC143C;">${title}</strong></p>
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+                            <strong>Customer:</strong> ${contact.name || user.name}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+                            <strong>Email:</strong> ${contact.email}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+                            <strong>Reference:</strong> ${reference}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+                            <strong>Event Date:</strong> ${formattedDate} at ${startTime}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+                            <strong>Total Amount:</strong> ₦${price}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 15px 0;">
+                            <strong>Tickets Purchased:</strong>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                              ${ticketListHtml}
+                            </ul>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 20px 30px; text-align: center; background-color: #f4f4f4; border-radius: 0 0 8px 8px; font-size: 14px; color: #666666;">
+                      <p style="margin: 0;">234 Tickets - Your Premier Event Ticketing Platform</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
       `,
     };
 
