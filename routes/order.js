@@ -129,7 +129,7 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
 router.get("/orders", verifyToken, async (req, res) => {
   try {
     const userId = req.decoded._id; // from token
-    const orders = await Order.find({ userId: userId }).sort({ createdAt: -1 });
+    const orders = await Order.find({ userId: userId });
     ////console.log(orders);
     ////console.log(userId);
     res.json({
@@ -144,7 +144,7 @@ router.get("/orders", verifyToken, async (req, res) => {
 });
 router.get("/all-orders", async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 }); // get all orders, latest first
+    const orders = await Order.find(); // get all orders
 
     res.json({
       success: true,
@@ -162,7 +162,6 @@ router.get("/userr/orders", verifyToken, async (req, res) => {
     const products = await Order.find({
       userId: userId,
     })
-      .sort({ createdAt: -1 })
       .deepPopulate("products.productID.owner")
       .exec();
     ////console.log(products);
