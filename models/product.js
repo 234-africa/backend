@@ -25,6 +25,11 @@ const ProductSchema = new Schema(
     photos: { type: Array },
     time: { type: Date, default: Date.now },
     price: Number,
+    currency: {
+      type: String,
+      enum: ["NGN", "USD", "GBP", "EUR", "GHS"],
+      default: "NGN"
+    },
     event: {
       start: { type: Date, required: true },
       end: { type: Date, required: false },
