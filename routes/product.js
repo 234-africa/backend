@@ -109,7 +109,7 @@ router.post(
       product.price = req.body.price;
 
       await product.save();
-      console.log("✅ Product saved successfully:", product._id);
+     // ////console.log("Saved Product:", JSON.stringify(product, null, 2));
 
       res.json({
         status: true,
@@ -118,11 +118,8 @@ router.post(
         msg: "Successfully uploaded " + req.files.length + "files!",
       });
     } catch (error) {
-      console.error("❌ Error creating product/event:", error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message || "Failed to create event"
-      });
+      ////console.log(error);
+      res.status(500).json({ success: false });
     }
   }
 );
