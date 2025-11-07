@@ -17,16 +17,23 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; // Replace with you
 // ✅ Initialize transaction
 // ✅ Initialize Payment
 router.post("/initialize", async (req, res) => {
-  const { email, amount } = req.body;
+  const { email, amount, currency } = req.body;
 
   try {
+    const paymentData = {
+      email,
+      amount: amount * 100, // Convert to smallest currency unit
+      callback_url: `${process.env.FRONTEND_URL}/payment-success`,
+    };
+
+    // Add currency if provided (Paystack supports NGN, USD, GHS, etc.)
+    if (currency && currency !== "NGN") {
+      paymentData.currency = currency;
+    }
+
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
-      {
-        email,
-        amount: amount * 100, // Convert Naira to Kobo
-        callback_url: `${process.env.FRONTEND_URL}/payment-success`,
-      },
+      paymentData,
       {
         headers: {
           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
@@ -110,6 +117,7 @@ router.post("/order", async (req, res) => {
     title,
     affiliate,
     promoCode,
+    currency,
   } = req.body;
 
   console.log("📦 Order request:", req.body);
@@ -194,6 +202,7 @@ router.post("/order", async (req, res) => {
       startTime,
       location,
       price: verifiedPaidAmount, // ✅ Use Paystack verified amount, not client price
+      currency: currency || "NGN", // ✅ Store currency used for payment
       createdAt: moment().format(),
     };
     if (affiliate) orderData.affiliate = affiliate;
@@ -524,3 +533,4 @@ router.post("/order", async (req, res) => {
 });
 
 module.exports = router;
+  
