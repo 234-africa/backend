@@ -16,6 +16,12 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; // Replace with you
 
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
+  if (!process.env.GOOGLE_APP_EMAIL || !process.env.GOOGLE_APP_PW) {
+    console.error("❌ CRITICAL: Email credentials (GOOGLE_APP_EMAIL or GOOGLE_APP_PW) are not configured!");
+    console.error("❌ Cannot send email to:", mailOptions.to);
+    return false;
+  }
+
   const transporter = nodemailer.createTransport({
     host: "mail.privateemail.com",
     port: 465,
@@ -33,8 +39,10 @@ async function sendEmailAsync(mailOptions, retries = 3) {
       return true;
     } catch (error) {
       console.error(`❌ Email attempt ${attempt}/${retries} failed to ${mailOptions.to}:`, error.message);
+      console.error(`❌ Full error:`, error);
       if (attempt === retries) {
         console.error(`❌ All email attempts failed for ${mailOptions.to}`);
+        console.error(`❌ Email config - Host: mail.privateemail.com, Port: 465, User: ${process.env.GOOGLE_APP_EMAIL ? 'SET' : 'NOT SET'}`);
         return false;
       }
       await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
