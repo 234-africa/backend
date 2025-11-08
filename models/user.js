@@ -39,6 +39,13 @@ const UserSchema = new Schema({
   resetLink: { data: String, default: '' },
   address: { type: Schema.Types.ObjectId, ref: "Address" },
 
+  // ✅ Currency preference for payments
+  currency: { 
+    type: String, 
+    enum: ["NGN", "USD", "GBP", "EUR", "GHS"], 
+    default: "NGN" 
+  },
+
   // ✅ Earnings section
   totalEarnings: { type: Number, default: 0 },   // grows when orders are made
   totalPaidOut: { type: Number, default: 0 },    // grows when admin pays
