@@ -40,6 +40,11 @@ const ProductSchema = new Schema(
     {
       name: { type: String, required: true },
       price: { type: Number },
+      currency: {
+        type: String,
+        enum: ["NGN", "USD", "GBP", "EUR", "GHS"],
+        default: "NGN"
+      },
 
       type: {
         type: String,
