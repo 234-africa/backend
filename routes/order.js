@@ -107,6 +107,16 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
       stream.on("error", reject);
     });
 
+    // === Validate Email Configuration ===
+    if (!process.env.GOOGLE_APP_EMAIL || !process.env.GOOGLE_APP_PW) {
+      console.error("❌ CRITICAL: Email credentials (GOOGLE_APP_EMAIL or GOOGLE_APP_PW) are not configured!");
+      fs.unlinkSync(pdfPath);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Email service is not configured. Please contact support." 
+      });
+    }
+
     // === Email PDF ===
     const transporter = nodemailer.createTransport({
       host: "mail.privateemail.com",
@@ -118,22 +128,32 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
       },
     });
 
-    await transporter.sendMail({
-      from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
-      to: userEmail,
-      subject: "Your Orders",
-      text: "Attached is your order summary.",
-      attachments: [
-        {
-          filename: `orders_${userId}.pdf`,
-          path: pdfPath,
-        },
-      ],
-    });
+    try {
+      await transporter.sendMail({
+        from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
+        to: userEmail,
+        subject: "Your Orders",
+        text: "Attached is your order summary.",
+        attachments: [
+          {
+            filename: `orders_${userId}.pdf`,
+            path: pdfPath,
+          },
+        ],
+      });
 
-    fs.unlinkSync(pdfPath); // delete temp file
-
-    res.json({ success: true, message: "Orders sent to email" });
+      console.log(`✅ Orders PDF emailed successfully to ${userEmail}`);
+      fs.unlinkSync(pdfPath);
+      res.json({ success: true, message: "Orders sent to email" });
+    } catch (emailError) {
+      console.error("❌ Email sending failed:", emailError.message);
+      console.error("Full error:", emailError);
+      fs.unlinkSync(pdfPath);
+      return res.status(500).json({ 
+        success: false, 
+        message: `Failed to send email: ${emailError.message}` 
+      });
+    }
   } catch (err) {
     console.error("❌ Server error:", err);
     res.status(500).json({ success: false, message: "Server error" });
