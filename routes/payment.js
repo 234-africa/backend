@@ -102,6 +102,7 @@ router.post("/order", async (req, res) => {
     reference,
     contact,
     userId,
+    productId,
     tickets,
     startDate,
     startTime,
@@ -139,6 +140,7 @@ router.post("/order", async (req, res) => {
     const orderData = {
       title,
       reference,
+      productId,
       userId,
       contact,
       tickets,
@@ -387,7 +389,7 @@ router.post("/order", async (req, res) => {
     await mailTransporter.sendMail(ownerEmail);
 
     // ✅ Reduce ticket quantity correctly
-    const product = await Product.findOne({ title, user: userId });
+    const product = await Product.findById(productId);
 
     if (product) {
       for (const t of tickets) {
