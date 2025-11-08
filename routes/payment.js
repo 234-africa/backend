@@ -42,6 +42,18 @@ async function sendEmailAsync(mailOptions, retries = 3) {
   }
 }
 
+// ✅ Currency symbol helper
+function getCurrencySymbol(currency) {
+  const symbols = {
+    NGN: "₦",
+    USD: "$",
+    GBP: "£",
+    EUR: "€",
+    GHS: "GH₵"
+  };
+  return symbols[currency] || "₦";
+}
+
 // ✅ Helper function to process order (shared by webhook and /order endpoint)
 async function processOrderWithTicket(orderData) {
   const {
@@ -57,10 +69,14 @@ async function processOrderWithTicket(orderData) {
     title,
     affiliate,
     promoCode,
+    currency,
   } = orderData;
 
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
+  
+  const orderCurrency = currency || user.currency || "NGN";
+  const currencySymbol = getCurrencySymbol(orderCurrency);
 
   const formattedDate = dayjs(startDate).format("MMM D, YYYY");
   const ticketList = tickets
@@ -109,6 +125,7 @@ async function processOrderWithTicket(orderData) {
     startTime,
     location,
     price,
+    currency: orderCurrency,
     createdAt: moment().format(),
   };
   if (affiliate) newOrderData.affiliate = affiliate;
@@ -247,7 +264,7 @@ async function processOrderWithTicket(orderData) {
   currentY += 50;
   drawField("EMAIL", contact.email, currentY);
   currentY += 50;
-  drawField("AMOUNT", `\u20A6${price}`, currentY);
+  drawField("AMOUNT", `${currencySymbol}${price}`, currentY);
 
   currentY += 50;
   drawField("TICKET", ticketList, currentY, true);
@@ -316,7 +333,7 @@ async function processOrderWithTicket(orderData) {
     })</p>
         <p><strong>Reference:</strong> ${reference}</p>
         <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
-        <p><strong>Total:</strong> ₦${price}</p>
+        <p><strong>Total:</strong> ${currencySymbol}${price}</p>
         <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
       </div>
     `,
@@ -357,18 +374,38 @@ async function processOrderWithTicket(orderData) {
 // ✅ Initialize transaction
 // ✅ Initialize Payment
 router.post("/initialize", async (req, res) => {
-  const { email, amount, metadata } = req.body;
+  const { email, amount, metadata, currency } = req.body;
 
   try {
+    const requestedCurrency = currency || "NGN";
+    
+    const PAYSTACK_SUPPORTED_CURRENCIES = ["NGN", "USD", "GBP", "GHS"];
+    
+    if (!PAYSTACK_SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
+      return res.status(400).json({ 
+        error: `Currency '${requestedCurrency}' is not supported by Paystack. Please use one of: NGN, USD, GBP, or GHS.`,
+        supportedCurrencies: PAYSTACK_SUPPORTED_CURRENCIES
+      });
+    }
+    
+    const paymentCurrency = requestedCurrency;
+    
     const paymentData = {
       email,
-      amount: amount * 100, // Convert Naira to Kobo
+      amount: amount * 100, // Convert to smallest unit (kobo/cents/pence)
+      currency: paymentCurrency, // NGN, USD, GBP, GHS (Paystack supported)
       callback_url: `${process.env.FRONTEND_URL}/payment-success`,
     };
 
-    // ✅ Include metadata if provided (for webhook order creation)
     if (metadata) {
-      paymentData.metadata = metadata;
+      paymentData.metadata = {
+        ...metadata,
+        currency: paymentCurrency,
+      };
+    } else {
+      paymentData.metadata = {
+        currency: paymentCurrency,
+      };
     }
 
     const response = await axios.post(
@@ -454,6 +491,7 @@ router.post("/webhook/paystack", async (req, res) => {
             const orderData = {
               ...metadata.orderData,
               reference,
+              currency: metadata.currency || metadata.orderData.currency || "NGN",
             };
             
             // ✅ Process order (promo code handled inside helper function)
@@ -517,6 +555,7 @@ router.post("/order", async (req, res) => {
     title,
     affiliate,
     promoCode,
+    currency,
   } = req.body;
 
   console.log("📦 Order request:", req.body);
@@ -534,7 +573,10 @@ router.post("/order", async (req, res) => {
     }
 
     // ✅ Process order using shared helper (handles PDF, emails, ticket quantity, and promo codes)
-    const order = await processOrderWithTicket(req.body);
+    const order = await processOrderWithTicket({
+      ...req.body,
+      currency: currency || "NGN",
+    });
 
     // ✅ Instant response (emails sent asynchronously)
     res.status(201).json({
