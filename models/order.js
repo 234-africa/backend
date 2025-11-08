@@ -14,6 +14,7 @@ const OrderSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
   title: {
     type: String,
     required: true
