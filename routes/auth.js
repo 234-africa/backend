@@ -220,16 +220,6 @@ router.post("/auth/signup", async (req, res) => {
 
     const confirmURL = `${process.env.FRONTEND_URL}/confirm-email?token=${token}`;
 
-    const transporter = nodemailer.createTransport({
-      host: "mail.privateemail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.GOOGLE_APP_EMAIL, // info@234tickets.live
-        pass: process.env.GOOGLE_APP_PW, // password or app password
-      },
-    });
-
     const mailOptions = {
       from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
       to: email,
@@ -243,16 +233,36 @@ router.post("/auth/signup", async (req, res) => {
 
     await newUser.save();
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return res.status(500).json({ success: false, message: error.message });
-      } else {
-        return res.status(200).json({
-          success: true,
-          message:
-            "Signup successful. Please check your email to confirm your account.",
-        });
+    // ✅ Send confirmation email asynchronously with retry logic (non-blocking)
+    setImmediate(async () => {
+      const transporter = nodemailer.createTransport({
+        host: "mail.privateemail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.GOOGLE_APP_EMAIL,
+          pass: process.env.GOOGLE_APP_PW,
+        },
+      });
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log(`✅ Confirmation email sent to ${email}`);
+          break;
+        } catch (error) {
+          console.error(`❌ Email attempt ${attempt}/3 failed for ${email}:`, error.message);
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          }
+        }
       }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Signup successful. Please check your email to confirm your account.",
     });
   } catch (err) {
     res.status(500).json({
