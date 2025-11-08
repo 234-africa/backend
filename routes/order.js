@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const Order = require("../models/order");
+const Product = require("../models/product");
 const verifyToken = require("../middelwares/verify-token");
 
 const nodemailer = require("nodemailer");
@@ -13,7 +14,7 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
   try {
     const userId = req.decoded._id;
     const userEmail = req.decoded.email;
-    const orders = await Order.find({ userId });
+    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
 
     if (!orders.length) {
       return res.status(404).json({
@@ -129,7 +130,7 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
 router.get("/orders", verifyToken, async (req, res) => {
   try {
     const userId = req.decoded._id; // from token
-    const orders = await Order.find({ userId: userId });
+    const orders = await Order.find({ userId: userId }).sort({ createdAt: -1 });
     ////console.log(orders);
     ////console.log(userId);
     res.json({
@@ -144,7 +145,7 @@ router.get("/orders", verifyToken, async (req, res) => {
 });
 router.get("/all-orders", async (req, res) => {
   try {
-    const orders = await Order.find(); // get all orders
+    const orders = await Order.find().sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -162,6 +163,7 @@ router.get("/userr/orders", verifyToken, async (req, res) => {
     const products = await Order.find({
       userId: userId,
     })
+      .sort({ createdAt: -1 })
       .deepPopulate("products.productID.owner")
       .exec();
     ////console.log(products);
@@ -178,6 +180,51 @@ router.get("/userr/orders", verifyToken, async (req, res) => {
     });
   }
 });
+
+router.get("/orders/by-event/:productId", verifyToken, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const organizerId = req.decoded._id;
+
+    const product = await Product.findById(productId);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
+    }
+
+    if (product.user.toString() !== organizerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view orders for this event",
+      });
+    }
+
+    const orders = await Order.find({ productId })
+      .sort({ createdAt: -1 })
+      .populate("userId", "name email");
+
+    res.json({
+      success: true,
+      count: orders.length,
+      event: {
+        id: product._id,
+        title: product.title,
+      },
+      orders,
+    });
+  } catch (error) {
+    console.error("Error fetching orders by event:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
 // DELETE /api/order/:orderId
 router.delete("/order/:orderId", async (req, res) => {
   const { orderId } = req.params;
