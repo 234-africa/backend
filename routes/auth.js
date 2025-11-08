@@ -235,6 +235,11 @@ router.post("/auth/signup", async (req, res) => {
 
     // ✅ Send confirmation email asynchronously with retry logic (non-blocking)
     setImmediate(async () => {
+      if (!process.env.GOOGLE_APP_EMAIL || !process.env.GOOGLE_APP_PW) {
+        console.error("❌ CRITICAL: Email credentials not configured! Cannot send confirmation email to:", email);
+        return;
+      }
+
       const transporter = nodemailer.createTransport({
         host: "mail.privateemail.com",
         port: 465,
@@ -252,8 +257,11 @@ router.post("/auth/signup", async (req, res) => {
           break;
         } catch (error) {
           console.error(`❌ Email attempt ${attempt}/3 failed for ${email}:`, error.message);
+          console.error(`❌ Full error:`, error);
           if (attempt < 3) {
             await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          } else {
+            console.error(`❌ All confirmation email attempts failed for ${email}`);
           }
         }
       }
@@ -360,10 +368,13 @@ router.post("/auth/forgotPassword", async (req, res) => {
             } else {
               mailTransporter.sendMail(data, function (error, body) {
                 if (error) {
+                  console.error("❌ Password reset email failed:", error.message);
+                  console.error("❌ Full error:", error);
                   return res.status(400).json({
                     error: error.message,
                   });
                 }
+                console.log(`✅ Password reset email sent to ${email}`);
                 return res.status(200).json({
                   message:
                     "Email has been sent, please follow the instructions",
