@@ -9,6 +9,7 @@ const fs = require("fs");
 
 const path = require("path");
 const PDFDocument = require("pdfkit-table");
+const ExcelJS = require("exceljs");
 
 router.get("/orders/download-and-email", verifyToken, async (req, res) => {
   try {
@@ -50,15 +51,27 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
         { label: "PHONE", property: "phone", noWrap: false },
         { label: "AMOUNT", property: "price", noWrap: false },
       ],
-      datas: orders.map((order) => ({
-        _id: order._id.toString(),
-        date: new Date(order.createdAt).toLocaleString(),
-        reference: order.reference || "N/A",
-        title: order.title || "N/A",
-        email: order.contact?.email || "N/A",
-        phone: order.contact?.phone || "N/A",
-        price: `₦ ${(order.price || 0).toLocaleString("en-NG")}`,
-      })),
+      datas: orders.map((order) => {
+        const currencySymbols = {
+          NGN: "₦",
+          USD: "$",
+          GBP: "£",
+          EUR: "€",
+          GHS: "GH₵",
+        };
+        const currency = order.currency || "NGN";
+        const symbol = currencySymbols[currency] || "₦";
+        
+        return {
+          _id: order._id.toString(),
+          date: new Date(order.createdAt).toLocaleString(),
+          reference: order.reference || "N/A",
+          title: order.title || "N/A",
+          email: order.contact?.email || "N/A",
+          phone: order.contact?.phone || "N/A",
+          price: `${symbol} ${(order.price || 0).toLocaleString()}`,
+        };
+      }),
     };
 
     // === Render Table ===
@@ -123,6 +136,93 @@ router.get("/orders/download-and-email", verifyToken, async (req, res) => {
     res.json({ success: true, message: "Orders sent to email" });
   } catch (err) {
     console.error("❌ Server error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+router.get("/orders/export-excel", verifyToken, async (req, res) => {
+  try {
+    const userId = req.decoded._id;
+    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
+
+    if (!orders.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No orders found",
+      });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Orders");
+
+    worksheet.columns = [
+      { header: "ORDER ID", key: "orderId", width: 25 },
+      { header: "DATE", key: "date", width: 20 },
+      { header: "REFERENCE", key: "reference", width: 20 },
+      { header: "EVENT", key: "event", width: 30 },
+      { header: "CUSTOMER EMAIL", key: "email", width: 30 },
+      { header: "PHONE", key: "phone", width: 15 },
+      { header: "AMOUNT", key: "amount", width: 15 },
+      { header: "CURRENCY", key: "currency", width: 10 },
+    ];
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF228B22" },
+    };
+    worksheet.getRow(1).font = { color: { argb: "FFFFFFFF" }, bold: true };
+
+    orders.forEach((order) => {
+      const currencySymbols = {
+        NGN: "₦",
+        USD: "$",
+        GBP: "£",
+        EUR: "€",
+        GHS: "GH₵",
+      };
+      const currency = order.currency || "NGN";
+      const symbol = currencySymbols[currency] || "₦";
+
+      worksheet.addRow({
+        orderId: order._id.toString(),
+        date: new Date(order.createdAt).toLocaleString(),
+        reference: order.reference || "N/A",
+        event: order.title || "N/A",
+        email: order.contact?.email || "N/A",
+        phone: order.contact?.phone || "N/A",
+        amount: `${symbol} ${(order.price || 0).toLocaleString()}`,
+        currency: currency,
+      });
+    });
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      }
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=orders_${userId}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("❌ Excel export error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
