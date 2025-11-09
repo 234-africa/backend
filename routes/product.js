@@ -141,6 +141,12 @@ router.post(
       if (req.body.tickets) {
         try {
           parsedTickets = JSON.parse(req.body.tickets);
+          
+          // Ensure each ticket has a currency field with proper formatting
+          parsedTickets = parsedTickets.map(ticket => ({
+            ...ticket,
+            currency: ticket.currency ? ticket.currency.toUpperCase() : 'NGN'
+          }));
         } catch (parseError) {
           console.error("Error parsing tickets:", parseError);
           return res.status(400).json({ 
