@@ -8,15 +8,11 @@ const dotenv = require("dotenv");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
-const path = require("path");
 const { runCleanups } =  require("./routes/cron");
 
 
 // Load passport config
 require("./auth");
-
-// Load dynamic meta tags middleware
-const dynamicMetaTags = require("./middelwares/dynamic-meta-tags");
 
 dotenv.config();
 
@@ -129,17 +125,6 @@ app.post("/api/message", (req, res) => {
   const { name, message } = req.body;
   //console.log("Received:", name, message);
   res.json({ status: "success", received: { name, message } });
-});
-
-// ------------------- Dynamic Meta Tags for Event Sharing ------------------- //
-app.use(dynamicMetaTags);
-
-// ------------------- Serve Frontend Static Files ------------------- //
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-// ------------------- SPA Fallback Route ------------------- //
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
 });
 
 // ------------------- Start Server ------------------- //
