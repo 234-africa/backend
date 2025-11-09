@@ -125,13 +125,31 @@ router.post(
     try {
       
       let product = new Product();
-      // product.photos.push(req.files[10].location);
-      req.files.forEach((f) => product.photos.push(f.location));
-      //  product.photos.push(...req.files.map(({ location }) => location));
+      
+      // Handle photos - only add if files were uploaded
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((f) => product.photos.push(f.location));
+      }
+      
       product.category = req.body.categoryID;
       product.title = req.body.title;
       product.customizeUrl = req.body.customizeUrl;
       product.user = req.decoded._id;
+      
+      // Parse tickets with error handling
+      let parsedTickets = [];
+      if (req.body.tickets) {
+        try {
+          parsedTickets = JSON.parse(req.body.tickets);
+        } catch (parseError) {
+          console.error("Error parsing tickets:", parseError);
+          return res.status(400).json({ 
+            success: false, 
+            message: "Invalid tickets format" 
+          });
+        }
+      }
+      
       product.event = {
         start: new Date(req.body.eventDate),
 
@@ -144,27 +162,31 @@ router.post(
           name: req.body.locationName || "", // optional
          
         },
-        tickets: JSON.parse(req.body.tickets),
+        tickets: parsedTickets,
       };
-      product.tag = req.body.tag.split(",");
+      
+      // Handle tags - split if exists, otherwise empty array
+      product.tag = req.body.tag ? req.body.tag.split(",") : [];
 
       product.description = req.body.description;
-      //product.photos = req.files[0].location;
 
       product.price = req.body.price;
 
       await product.save();
-     // ////console.log("Saved Product:", JSON.stringify(product, null, 2));
+      console.log("Product saved successfully:", product._id);
 
       res.json({
         status: true,
         message: "save succes",
         data: product,
-        msg: "Successfully uploaded " + req.files.length + "files!",
+        msg: "Successfully uploaded " + (req.files ? req.files.length : 0) + " files!",
       });
     } catch (error) {
-      ////console.log(error);
-      res.status(500).json({ success: false });
+      console.error("Error creating product:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error.message || "Error creating event" 
+      });
     }
   }
 );
@@ -305,6 +327,20 @@ router.put(
       updateData.user = req.decoded._id;
       updateData.tag = req.body.tag?.split(",") || [];
 
+      // Parse tickets with error handling
+      let parsedTickets = [];
+      if (req.body.tickets) {
+        try {
+          parsedTickets = JSON.parse(req.body.tickets);
+        } catch (parseError) {
+          console.error("Error parsing tickets during update:", parseError);
+          return res.status(400).json({ 
+            status: false, 
+            message: "Invalid tickets format" 
+          });
+        }
+      }
+
       // Event information
       updateData.event = {
          start: new Date(req.body.eventDate),
@@ -317,7 +353,7 @@ router.put(
           name: req.body.locationName || "",
          
         },
-        tickets: JSON.parse(req.body.tickets || "[]"),
+        tickets: parsedTickets,
       };
       console.log(updateData)
       // Update the product
@@ -340,7 +376,7 @@ router.put(
       });
     } catch (error) {
       console.error("Update Error:", error);
-      res.status(500).json({ status: false, message: "Server error" });
+      res.status(500).json({ status: false, message: error.message || "Server error" });
     }
   }
 );
