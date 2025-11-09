@@ -31,8 +31,8 @@ app.use(morgan("combined"));
 app.use(cors());
 app.use(cookieParser());
 
-const { stripeWebhookHandler } = require("./routes/payment");
-app.post("/api/webhook/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
+const paymentRoutes = require("./routes/payment");
+app.post("/api/webhook/stripe", express.raw({ type: "application/json" }), paymentRoutes.stripeWebhookHandler);
 
 app.use(bodyParser.json());
 app.use(passport.initialize());
@@ -48,7 +48,6 @@ const productsRoutes = require("./routes/product");
 const staffRoutes = require("./routes/staff");
 const categoryRoutes = require("./routes/category");
 const userRoutes = require("./routes/auth");
-const paymentRoutes = require("./routes/payment");
 const bankRoutes = require("./routes/bank");
 const affiliateRoutes = require("./routes/affiliate");
 const orderRoutes = require("./routes/order");
