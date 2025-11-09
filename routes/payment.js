@@ -12,7 +12,8 @@ const Product = require("../models/product");
 const axios = require("axios");
 const PromoCode = require("../models/promoCode");
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; // Replace with your secret key
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
@@ -665,6 +666,102 @@ router.post("/webhook/paystack", async (req, res) => {
   }
 });
 
+// ✅ Stripe Payment Intent - Initialize Payment
+router.post("/stripe/create-payment-intent", async (req, res) => {
+  const { email, amount, metadata, currency } = req.body;
+
+  try {
+    const requestedCurrency = (currency || "USD").toLowerCase();
+    
+    const STRIPE_SUPPORTED_CURRENCIES = ["usd", "gbp", "eur"];
+    
+    if (!STRIPE_SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
+      return res.status(400).json({ 
+        error: `Currency '${requestedCurrency.toUpperCase()}' is not supported by Stripe. Please use one of: USD, GBP, or EUR.`,
+        supportedCurrencies: STRIPE_SUPPORTED_CURRENCIES.map(c => c.toUpperCase())
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: requestedCurrency,
+      receipt_email: email,
+      metadata: {
+        ...metadata,
+        email,
+        currency: requestedCurrency.toUpperCase(),
+      },
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    res.status(200).json({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+    });
+    
+    console.log("✅ Stripe Payment Intent created:", paymentIntent.id);
+  } catch (error) {
+    console.error("❌ Stripe Payment Intent Error:", error.message);
+    res.status(500).json({ error: "Failed to create payment intent" });
+  }
+});
+
+// ✅ Stripe Webhook Handler (exported for direct app registration)
+const stripeWebhookHandler = async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("❌ Stripe webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object;
+    const { metadata } = paymentIntent;
+
+    console.log(`✅ Stripe webhook received for payment: ${paymentIntent.id}`);
+
+    res.sendStatus(200);
+
+    setImmediate(async () => {
+      try {
+        const reference = paymentIntent.id;
+        
+        const existingOrder = await Order.findOne({ reference });
+        
+        if (existingOrder) {
+          console.log(`✅ Order already exists for Stripe payment: ${reference}`);
+          return;
+        }
+        
+        if (metadata && metadata.orderData) {
+          console.log(`📦 Creating order from Stripe webhook: ${reference}`);
+          
+          const orderData = JSON.parse(metadata.orderData);
+          orderData.reference = reference;
+          orderData.currency = metadata.currency || "USD";
+          
+          await processOrderWithTicket(orderData);
+          console.log(`✅ Order created successfully from Stripe webhook: ${reference}`);
+        } else {
+          console.log(`⚠️ No metadata found for Stripe payment: ${reference}`);
+        }
+      } catch (error) {
+        console.error("❌ Stripe webhook order processing error:", error);
+      }
+    });
+  } else {
+    res.sendStatus(200);
+  }
+};
+
 // GET /api/order/:reference
 router.get("/order/:reference", async (req, res) => {
   const { reference } = req.params;
@@ -757,3 +854,4 @@ router.post("/order", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.stripeWebhookHandler = stripeWebhookHandler;
