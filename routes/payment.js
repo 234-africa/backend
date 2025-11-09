@@ -853,5 +853,6 @@ router.post("/order", async (req, res) => {
   }
 });
 
+router.stripeWebhookHandler = stripeWebhookHandler;
 module.exports = router;
 module.exports.stripeWebhookHandler = stripeWebhookHandler;
