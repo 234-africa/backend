@@ -28,9 +28,13 @@ app.use(
   })
 );
 app.use(morgan("combined"));
-app.use(bodyParser.json());
 app.use(cors());
 app.use(cookieParser());
+
+const { stripeWebhookHandler } = require("./routes/payment");
+app.post("/api/webhook/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
+
+app.use(bodyParser.json());
 app.use(passport.initialize());
 app.use(passport.session());
 
