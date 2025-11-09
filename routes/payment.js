@@ -311,11 +311,83 @@ async function processOrderWithTicket(orderData) {
     to: contact.email,
     subject: "🎟️ Your Ticket Order Confirmation",
     html: `
-      <div style="font-family: Arial; line-height: 1.6;">
-        <h2>🎉 Your ticket for <strong>${title}</strong> is confirmed!</h2>
-        <p><strong>Reference:</strong> ${reference}</p>
-        <p>Your ticket is attached as a PDF.</p>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Ticket Confirmation</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td align="center" style="padding: 20px 0;">
+              <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <!-- Header with brand colors -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #228B22 0%, #047143 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">🎉 Ticket Confirmed!</h1>
+                  </td>
+                </tr>
+                
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 40px 30px;">
+                    <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #333333;">Hi <strong>${contact.name || user.name}</strong>,</p>
+                    <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #333333;">Great news! Your ticket for <strong style="color: #228B22;">${title}</strong> has been confirmed.</p>
+                    
+                    <!-- Ticket Info Card -->
+                    <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 30px; background-color: #f9f9f9; border-radius: 12px; overflow: hidden;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                              <td style="padding: 8px 0; font-size: 14px; color: #666666;">Reference Number</td>
+                              <td style="padding: 8px 0; font-size: 14px; color: #228B22; font-weight: 700; text-align: right; font-family: monospace;">${reference}</td>
+                            </tr>
+                            <tr>
+                              <td colspan="2" style="padding: 12px 0 8px 0; border-top: 1px solid #e0e0e0; font-size: 14px; color: #666666;">Event Details</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-size: 14px; color: #666666;">Date</td>
+                              <td style="padding: 4px 0; font-size: 14px; color: #333333; font-weight: 600; text-align: right;">${formattedDate}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-size: 14px; color: #666666;">Time</td>
+                              <td style="padding: 4px 0; font-size: 14px; color: #333333; font-weight: 600; text-align: right;">${startTime}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-size: 14px; color: #666666;">Amount</td>
+                              <td style="padding: 4px 0; font-size: 16px; color: #228B22; font-weight: 700; text-align: right;">${currencySymbol}${price}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- CTA -->
+                    <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #666666;">📎 Your ticket is attached as a PDF. Please present it at the event entrance.</p>
+                    
+                    <!-- Tips -->
+                    <div style="background-color: #fff3cd; border-left: 4px solid #DC143C; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                      <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>💡 Quick Tips:</strong><br>• Save this email and the attached PDF<br>• Arrive 15 minutes before the event<br>• Keep your booking reference handy</p>
+                    </div>
+                  </td>
+                </tr>
+                
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #f9f9f9; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                    <p style="margin: 0 0 10px; font-size: 14px; color: #666666;">Need help? Contact us anytime</p>
+                    <p style="margin: 0; font-size: 12px; color: #999999;">© ${new Date().getFullYear()} 234 Tickets. All rights reserved.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `,
     attachments: [
       {
@@ -327,23 +399,95 @@ async function processOrderWithTicket(orderData) {
   };
 
   const ticketListHtml = tickets
-    .map((t) => `${t.name.toUpperCase()} x${t.quantity}`)
-    .join("<br>");
+    .map((t) => `<tr><td style="padding: 8px 12px; font-size: 14px; color: #333333; border-bottom: 1px solid #f0f0f0;">${t.name.toUpperCase()}</td><td style="padding: 8px 12px; font-size: 14px; color: #228B22; font-weight: 700; text-align: right; border-bottom: 1px solid #f0f0f0;">x${t.quantity}</td></tr>`)
+    .join("");
   const ownerEmail = {
     from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
     to: user.email,
     subject: `📢 New Ticket Order for ${title}`,
     html: `
-      <div style="font-family: Arial; line-height: 1.6;">
-        <h2>📢 New order received for your event: <strong>${title}</strong></h2>
-        <p><strong>Customer:</strong> ${contact.name || user.name} (${
-      contact.email
-    })</p>
-        <p><strong>Reference:</strong> ${reference}</p>
-        <p><strong>Tickets:</strong><br>${ticketListHtml}</p>
-        <p><strong>Total:</strong> ${currencySymbol}${price}</p>
-        <p><strong>Date:</strong> ${formattedDate} at ${startTime}</p>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Order Notification</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td align="center" style="padding: 20px 0;">
+              <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <!-- Header -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #DC143C 0%, #B01030 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">📢 New Order Alert!</h1>
+                  </td>
+                </tr>
+                
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 40px 30px;">
+                    <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #333333;">Hi <strong>${user.name}</strong>,</p>
+                    <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #333333;">You've received a new ticket order for <strong style="color: #DC143C;">${title}</strong>! 🎉</p>
+                    
+                    <!-- Order Summary Card -->
+                    <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 30px; background-color: #f9f9f9; border-radius: 12px; overflow: hidden;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <h3 style="margin: 0 0 16px; font-size: 16px; color: #DC143C; font-weight: 700;">Order Details</h3>
+                          
+                          <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                            <tr>
+                              <td style="padding: 8px 0; font-size: 14px; color: #666666;">Reference</td>
+                              <td style="padding: 8px 0; font-size: 14px; color: #DC143C; font-weight: 700; text-align: right; font-family: monospace;">${reference}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 0; font-size: 14px; color: #666666;">Customer</td>
+                              <td style="padding: 8px 0; font-size: 14px; color: #333333; font-weight: 600; text-align: right;">${contact.name || user.name}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 0; font-size: 14px; color: #666666;">Email</td>
+                              <td style="padding: 8px 0; font-size: 14px; color: #333333; text-align: right;">${contact.email}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 0; font-size: 14px; color: #666666;">Event Date</td>
+                              <td style="padding: 8px 0; font-size: 14px; color: #333333; font-weight: 600; text-align: right;">${formattedDate} at ${startTime}</td>
+                            </tr>
+                          </table>
+
+                          <h4 style="margin: 20px 0 12px; font-size: 14px; color: #666666; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Tickets Ordered</h4>
+                          <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+                            ${ticketListHtml}
+                            <tr style="background-color: #f0f0f0;">
+                              <td style="padding: 12px; font-size: 16px; color: #333333; font-weight: 700;">Total</td>
+                              <td style="padding: 12px; font-size: 18px; color: #228B22; font-weight: 700; text-align: right;">${currencySymbol}${price}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Action Prompt -->
+                    <div style="background-color: #e8f5e9; border-left: 4px solid #228B22; padding: 16px; border-radius: 8px;">
+                      <p style="margin: 0; font-size: 14px; color: #2e7d32; line-height: 1.5;"><strong>✅ Action Required:</strong><br>Log in to your dashboard to view complete order details and manage your event.</p>
+                    </div>
+                  </td>
+                </tr>
+                
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #f9f9f9; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                    <p style="margin: 0 0 10px; font-size: 14px; color: #666666;">Manage your events at 234 Tickets</p>
+                    <p style="margin: 0; font-size: 12px; color: #999999;">© ${new Date().getFullYear()} 234 Tickets. All rights reserved.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `,
   };
 
