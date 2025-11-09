@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const moment = require("moment");
 const fs = require("fs");
-const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
 const QRCode = require("qrcode");
 const path = require("path");
 const dayjs = require("dayjs");
@@ -143,168 +143,114 @@ async function processOrderWithTicket(orderData) {
   const order = new Order(newOrderData);
   await order.save();
 
-  // ✅ Generate PDF using PDFKit
-  const doc = new PDFDocument({ size: [400, 530], margin: 0 });
-  const chunks = [];
+  // ✅ Generate Excel Ticket
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Ticket");
 
-  doc.on("data", (chunk) => chunks.push(chunk));
-  const pdfPromise = new Promise((resolve, reject) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+  // Set column widths
+  worksheet.columns = [
+    { width: 25 },
+    { width: 35 },
+  ];
+
+  // Title Row
+  const titleRow = worksheet.addRow(["🎟️ BOOKING CONFIRMATION"]);
+  titleRow.getCell(1).font = { size: 18, bold: true, color: { argb: "FFDC143C" } };
+  titleRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.mergeCells(`A${titleRow.number}:B${titleRow.number}`);
+  titleRow.height = 40;
+
+  worksheet.addRow([]);
+
+  // Event Details Header
+  const headerRow = worksheet.addRow(["EVENT DETAILS", ""]);
+  headerRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
+  headerRow.getCell(1).alignment = { horizontal: "left" };
+  worksheet.mergeCells(`A${headerRow.number}:B${headerRow.number}`);
+  headerRow.getCell(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE8F5E9" },
+  };
+
+  // Event Info
+  const addInfoRow = (label, value) => {
+    const row = worksheet.addRow([label, value]);
+    row.getCell(1).font = { bold: true, color: { argb: "FF333333" } };
+    row.getCell(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF5F5F5" },
+    };
+    row.getCell(2).font = { color: { argb: "FF000000" } };
+    row.height = 25;
+  };
+
+  addInfoRow("Event", title);
+  addInfoRow("Date", formattedDate);
+  addInfoRow("Time", startTime);
+  addInfoRow("Location", location || "TBA");
+
+  worksheet.addRow([]);
+
+  // Booking Details Header
+  const bookingHeaderRow = worksheet.addRow(["BOOKING DETAILS", ""]);
+  bookingHeaderRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
+  bookingHeaderRow.getCell(1).alignment = { horizontal: "left" };
+  worksheet.mergeCells(`A${bookingHeaderRow.number}:B${bookingHeaderRow.number}`);
+  bookingHeaderRow.getCell(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE8F5E9" },
+  };
+
+  // Booking Info
+  addInfoRow("Booking ID", reference);
+  addInfoRow("Name", contact.name || user.name);
+  addInfoRow("Email", contact.email);
+  addInfoRow("Amount", `${currencySymbol}${price}`);
+
+  worksheet.addRow([]);
+
+  // Tickets Header
+  const ticketsHeaderRow = worksheet.addRow(["TICKETS", ""]);
+  ticketsHeaderRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
+  ticketsHeaderRow.getCell(1).alignment = { horizontal: "left" };
+  worksheet.mergeCells(`A${ticketsHeaderRow.number}:B${ticketsHeaderRow.number}`);
+  ticketsHeaderRow.getCell(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE8F5E9" },
+  };
+
+  // Add tickets
+  tickets.forEach((t) => {
+    addInfoRow(t.name, `x${t.quantity}`);
   });
 
-  const w = doc.page.width;
-  const h = doc.page.height;
+  worksheet.addRow([]);
 
-  doc
-    .rect(15, 15, w - 30, h - 30)
-    .lineWidth(8)
-    .strokeColor("#DC143C")
-    .stroke();
+  // Footer
+  const footerRow = worksheet.addRow([`YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`]);
+  footerRow.getCell(1).font = { size: 12, bold: true, color: { argb: "FFDC143C" } };
+  footerRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.mergeCells(`A${footerRow.number}:B${footerRow.number}`);
+  footerRow.height = 30;
 
-  doc
-    .rect(25, 25, w - 50, h - 50)
-    .lineWidth(4)
-    .strokeColor("#228B22")
-    .stroke();
-
-  const infoBoxX = 45,
-    infoBoxY = 45,
-    infoBoxW = 220,
-    infoBoxH = 110;
-  doc
-    .roundedRect(infoBoxX, infoBoxY, infoBoxW, infoBoxH, 15)
-    .lineWidth(3)
-    .strokeColor("#228B22")
-    .stroke();
-
-  doc
-    .fontSize(20)
-    .fillColor("#000000")
-    .font("Helvetica-Bold")
-    .text(formattedDate, infoBoxX + 15, infoBoxY + 15, {
-      width: infoBoxW - 30,
-      align: "center",
+  // Add borders to all cells
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFE0E0E0" } },
+        left: { style: "thin", color: { argb: "FFE0E0E0" } },
+        bottom: { style: "thin", color: { argb: "FFE0E0E0" } },
+        right: { style: "thin", color: { argb: "FFE0E0E0" } },
+      };
+      cell.alignment = { vertical: "middle" };
     });
+  });
 
-  doc
-    .fontSize(12)
-    .font("Helvetica")
-    .text(startTime, infoBoxX + 15, infoBoxY + 45, {
-      width: infoBoxW - 30,
-      align: "center",
-    });
-
-  doc
-    .fontSize(11)
-    .font("Helvetica-Bold")
-    .text("BOOKING ID", infoBoxX + 15, infoBoxY + 65, {
-      width: infoBoxW - 30,
-      align: "center",
-    });
-
-  doc
-    .fontSize(11)
-    .font("Helvetica")
-    .text(reference, infoBoxX + 15, infoBoxY + 80, {
-      width: infoBoxW - 30,
-      align: "center",
-    });
-
-  try {
-    const qrDataUrl = await QRCode.toDataURL(reference, {
-      width: 80,
-      margin: 1,
-    });
-    const qrImage = Buffer.from(qrDataUrl.split(",")[1], "base64");
-    doc.image(qrImage, w - 110, 55, { width: 70 });
-  } catch (error) {
-    console.log("QR code generation failed:", error);
-  }
-
-  const titleY = 180;
-  doc
-    .fontSize(16)
-    .fillColor("#000000")
-    .font("Helvetica-Bold")
-    .text("BOOKING CONFIRMATION", 45, titleY);
-  doc
-    .moveTo(45, titleY + 20)
-    .lineTo(w - 45, titleY + 20)
-    .lineWidth(2)
-    .strokeColor("#228B22")
-    .stroke();
-
-  function drawField(label, value, y, isTicket = false) {
-    const labelWidth = 80;
-    const valueWidth = w - 130 - labelWidth;
-    const fieldHeight = isTicket ? 60 : 35;
-
-    doc
-      .roundedRect(45, y, labelWidth, fieldHeight, 8)
-      .fillAndStroke("#228B22", "#228B22");
-    doc
-      .fillColor("#FFFFFF")
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(label, 45 + 10, y + (isTicket ? 20 : 12), {
-        width: labelWidth - 20,
-        align: "center",
-      });
-
-    doc
-      .roundedRect(45 + labelWidth + 10, y, valueWidth, fieldHeight, 8)
-      .lineWidth(2)
-      .strokeColor("#228B22")
-      .fillAndStroke("#FFFFFF", "#228B22");
-
-    doc
-      .fillColor("#000000")
-      .font("Helvetica")
-      .fontSize(11)
-      .text(value, 45 + labelWidth + 20, y + (isTicket ? 10 : 12), {
-        width: valueWidth - 20,
-        align: "left",
-      });
-  }
-
-  let currentY = 220;
-  drawField("NAME", contact.name || user.name, currentY);
-  currentY += 50;
-  drawField("EMAIL", contact.email, currentY);
-  currentY += 50;
-  drawField("AMOUNT", `${currencySymbol}${price}`, currentY);
-
-  currentY += 50;
-  drawField("TICKET", ticketList, currentY, true);
-
-  const footerTextY = h - 80;
-  doc
-    .fontSize(10)
-    .fillColor("#DC143C")
-    .font("Helvetica-Bold")
-    .text(
-      `YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`,
-      45,
-      footerTextY,
-      {
-        width: w - 90,
-        align: "center",
-      }
-    );
-
-  const logoPath = path.join(__dirname, "views", "IMG_0264.png");
-  if (fs.existsSync(logoPath)) {
-    try {
-      const logoY = footerTextY + 20;
-      doc.image(logoPath, w / 2 - 15, logoY, { width: 30 });
-    } catch (error) {
-      console.log("Logo loading failed:", error);
-    }
-  }
-
-  doc.end();
-  const pdfBuffer = await pdfPromise;
+  const excelBuffer = await workbook.xlsx.writeBuffer();
 
   // ✅ Prepare emails
   const customerEmail = {
@@ -367,11 +313,11 @@ async function processOrderWithTicket(orderData) {
                     </table>
 
                     <!-- CTA -->
-                    <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #666666;">📎 Your ticket is attached as a PDF. Please present it at the event entrance.</p>
+                    <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #666666;">📎 Your ticket is attached as an Excel file. Please present it at the event entrance.</p>
                     
                     <!-- Tips -->
                     <div style="background-color: #fff3cd; border-left: 4px solid #DC143C; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                      <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>💡 Quick Tips:</strong><br>• Save this email and the attached PDF<br>• Arrive 15 minutes before the event<br>• Keep your booking reference handy</p>
+                      <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>💡 Quick Tips:</strong><br>• Save this email and the attached Excel file<br>• Arrive 15 minutes before the event<br>• Keep your booking reference handy</p>
                     </div>
                   </td>
                 </tr>
@@ -392,9 +338,9 @@ async function processOrderWithTicket(orderData) {
     `,
     attachments: [
       {
-        filename: `ticket-${reference}.pdf`,
-        content: pdfBuffer,
-        contentType: "application/pdf",
+        filename: `ticket-${reference}.xlsx`,
+        content: excelBuffer,
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       },
     ],
   };
