@@ -225,10 +225,68 @@ router.post("/auth/signup", async (req, res) => {
       to: email,
       subject: "Confirm your Email",
       html: `
-    <h3>Thanks for signing up, ${name}!</h3>
-    <p>Please click the link below to confirm your email:</p>
-    <a href="${confirmURL}">${confirmURL}</a>
-  `,
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Confirm Email</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td align="center" style="padding: 20px 0;">
+                <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #228B22 0%, #047143 100%); padding: 50px 30px; text-align: center;">
+                      <div style="background-color: rgba(255,255,255,0.2); width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 48px;">✉️</span>
+                      </div>
+                      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Welcome to 234 Tickets!</h1>
+                    </td>
+                  </tr>
+                  
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 40px 30px;">
+                      <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #333333;">Hi <strong>${name}</strong>,</p>
+                      <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #333333;">Thanks for signing up! We're excited to have you on board. To get started, please confirm your email address by clicking the button below.</p>
+                      
+                      <!-- CTA Button -->
+                      <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                        <tr>
+                          <td align="center">
+                            <a href="${confirmURL}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #228B22 0%, #047143 100%); color: #ffffff; text-decoration: none; border-radius: 50px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 15px rgba(34,139,34,0.3);">Confirm Email Address</a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Alternative Link -->
+                      <p style="margin: 30px 0 0; font-size: 14px; line-height: 1.6; color: #666666; text-align: center;">Or copy and paste this link into your browser:</p>
+                      <p style="margin: 10px 0 0; font-size: 13px; color: #228B22; word-break: break-all; text-align: center; background-color: #f9f9f9; padding: 12px; border-radius: 8px;">${confirmURL}</p>
+                      
+                      <!-- Info Box -->
+                      <div style="background-color: #fff3cd; border-left: 4px solid #DC143C; padding: 16px; border-radius: 8px; margin: 30px 0 0;">
+                        <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>🔒 Security Note:</strong><br>This link will expire in 24 hours. If you didn't create an account, please ignore this email.</p>
+                      </div>
+                    </td>
+                  </tr>
+                  
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #f9f9f9; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                      <p style="margin: 0 0 10px; font-size: 14px; color: #666666;">Need help? Contact our support team</p>
+                      <p style="margin: 0; font-size: 12px; color: #999999;">© ${new Date().getFullYear()} 234 Tickets. All rights reserved.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
     };
 
     await newUser.save();
@@ -347,13 +405,73 @@ router.post("/auth/forgotPassword", async (req, res) => {
         });
 
         const data = {
-          from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`, // ✅ add this
+          from: `"234 Tickets" <${process.env.GOOGLE_APP_EMAIL}>`,
           to: email,
           subject: "Reset Account Password Link",
           html: `
-    <h3>Please click the link below to reset your password</h3>
-    <p>${process.env.FRONTEND_URL}/reset?token=${token}</p>
-  `,
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Password Reset</title>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                      <!-- Header -->
+                      <tr>
+                        <td style="background: linear-gradient(135deg, #DC143C 0%, #B01030 100%); padding: 50px 30px; text-align: center;">
+                          <div style="background-color: rgba(255,255,255,0.2); width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 48px;">🔒</span>
+                          </div>
+                          <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Password Reset Request</h1>
+                        </td>
+                      </tr>
+                      
+                      <!-- Content -->
+                      <tr>
+                        <td style="padding: 40px 30px;">
+                          <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #333333;">Hi there,</p>
+                          <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #333333;">We received a request to reset your password. Click the button below to create a new password for your 234 Tickets account.</p>
+                          
+                          <!-- CTA Button -->
+                          <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                            <tr>
+                              <td align="center">
+                                <a href="${process.env.FRONTEND_URL}/reset?token=${token}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #DC143C 0%, #B01030 100%); color: #ffffff; text-decoration: none; border-radius: 50px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 15px rgba(220,20,60,0.3);">Reset My Password</a>
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Alternative Link -->
+                          <p style="margin: 30px 0 0; font-size: 14px; line-height: 1.6; color: #666666; text-align: center;">Or copy and paste this link into your browser:</p>
+                          <p style="margin: 10px 0 0; font-size: 13px; color: #DC143C; word-break: break-all; text-align: center; background-color: #f9f9f9; padding: 12px; border-radius: 8px;">${process.env.FRONTEND_URL}/reset?token=${token}</p>
+                          
+                          <!-- Warning Box -->
+                          <div style="background-color: #fff3cd; border-left: 4px solid #DC143C; padding: 16px; border-radius: 8px; margin: 30px 0 0;">
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #856404; line-height: 1.5;"><strong>⏱️ Important:</strong><br>This password reset link will expire in <strong>15 minutes</strong> for security reasons.</p>
+                            <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;">If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+                          </div>
+                        </td>
+                      </tr>
+                      
+                      <!-- Footer -->
+                      <tr>
+                        <td style="background-color: #f9f9f9; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                          <p style="margin: 0 0 10px; font-size: 14px; color: #666666;">Need help? Contact our support team</p>
+                          <p style="margin: 0; font-size: 12px; color: #999999;">© ${new Date().getFullYear()} 234 Tickets. All rights reserved.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
         };
 
         return user.updateOne(
