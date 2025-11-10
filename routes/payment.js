@@ -3,6 +3,7 @@ const moment = require("moment");
 const fs = require("fs");
 const ExcelJS = require("exceljs");
 const QRCode = require("qrcode");
+const PDFDocument = require("pdfkit");
 const path = require("path");
 const dayjs = require("dayjs");
 const nodemailer = require("nodemailer");
@@ -143,114 +144,75 @@ async function processOrderWithTicket(orderData) {
   const order = new Order(newOrderData);
   await order.save();
 
-  // ✅ Generate Excel Ticket
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Ticket");
-
-  // Set column widths
-  worksheet.columns = [
-    { width: 25 },
-    { width: 35 },
-  ];
-
-  // Title Row
-  const titleRow = worksheet.addRow(["🎟️ BOOKING CONFIRMATION"]);
-  titleRow.getCell(1).font = { size: 18, bold: true, color: { argb: "FFDC143C" } };
-  titleRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
-  worksheet.mergeCells(`A${titleRow.number}:B${titleRow.number}`);
-  titleRow.height = 40;
-
-  worksheet.addRow([]);
-
-  // Event Details Header
-  const headerRow = worksheet.addRow(["EVENT DETAILS", ""]);
-  headerRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
-  headerRow.getCell(1).alignment = { horizontal: "left" };
-  worksheet.mergeCells(`A${headerRow.number}:B${headerRow.number}`);
-  headerRow.getCell(1).fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFE8F5E9" },
-  };
-
-  // Event Info
-  const addInfoRow = (label, value) => {
-    const row = worksheet.addRow([label, value]);
-    row.getCell(1).font = { bold: true, color: { argb: "FF333333" } };
-    row.getCell(1).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFF5F5F5" },
-    };
-    row.getCell(2).font = { color: { argb: "FF000000" } };
-    row.height = 25;
-  };
-
-  addInfoRow("Event", title);
-  addInfoRow("Date", formattedDate);
-  addInfoRow("Time", startTime);
-  addInfoRow("Location", location || "TBA");
-
-  worksheet.addRow([]);
-
-  // Booking Details Header
-  const bookingHeaderRow = worksheet.addRow(["BOOKING DETAILS", ""]);
-  bookingHeaderRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
-  bookingHeaderRow.getCell(1).alignment = { horizontal: "left" };
-  worksheet.mergeCells(`A${bookingHeaderRow.number}:B${bookingHeaderRow.number}`);
-  bookingHeaderRow.getCell(1).fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFE8F5E9" },
-  };
-
-  // Booking Info
-  addInfoRow("Booking ID", reference);
-  addInfoRow("Name", contact.name || user.name);
-  addInfoRow("Email", contact.email);
-  addInfoRow("Amount", `${currencySymbol}${price}`);
-
-  worksheet.addRow([]);
-
-  // Tickets Header
-  const ticketsHeaderRow = worksheet.addRow(["TICKETS", ""]);
-  ticketsHeaderRow.getCell(1).font = { size: 14, bold: true, color: { argb: "FF228B22" } };
-  ticketsHeaderRow.getCell(1).alignment = { horizontal: "left" };
-  worksheet.mergeCells(`A${ticketsHeaderRow.number}:B${ticketsHeaderRow.number}`);
-  ticketsHeaderRow.getCell(1).fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFE8F5E9" },
-  };
-
-  // Add tickets
-  tickets.forEach((t) => {
-    addInfoRow(t.name, `x${t.quantity}`);
+  // ✅ Generate QR Code for the ticket
+  const qrCodeDataURL = await QRCode.toDataURL(reference, {
+    errorCorrectionLevel: 'H',
+    type: 'image/png',
+    width: 200,
+    margin: 2
   });
 
-  worksheet.addRow([]);
+  // ✅ Generate PDF Ticket
+  const pdfBuffer = await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
 
-  // Footer
-  const footerRow = worksheet.addRow([`YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`]);
-  footerRow.getCell(1).font = { size: 12, bold: true, color: { argb: "FFDC143C" } };
-  footerRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
-  worksheet.mergeCells(`A${footerRow.number}:B${footerRow.number}`);
-  footerRow.height = 30;
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
 
-  // Add borders to all cells
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell((cell) => {
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFE0E0E0" } },
-        left: { style: "thin", color: { argb: "FFE0E0E0" } },
-        bottom: { style: "thin", color: { argb: "FFE0E0E0" } },
-        right: { style: "thin", color: { argb: "FFE0E0E0" } },
-      };
-      cell.alignment = { vertical: "middle" };
+    const brandGreen = '#228B22';
+    const brandRed = '#DC143C';
+    const lightGray = '#f9f9f9';
+    const darkGray = '#333333';
+
+    doc.fontSize(24).fillColor(brandRed).text('🎟️ BOOKING CONFIRMATION', { align: 'center' });
+    doc.moveDown(1);
+
+    doc.fontSize(16).fillColor(brandGreen).text('EVENT DETAILS', { underline: true });
+    doc.moveDown(0.5);
+
+    doc.fontSize(12).fillColor(darkGray);
+    doc.text(`Event: ${title}`, { continued: false });
+    doc.text(`Date: ${formattedDate}`);
+    doc.text(`Time: ${startTime}`);
+    doc.text(`Location: ${location || 'TBA'}`);
+    doc.moveDown(1);
+
+    doc.fontSize(16).fillColor(brandGreen).text('BOOKING DETAILS', { underline: true });
+    doc.moveDown(0.5);
+
+    doc.fontSize(12).fillColor(darkGray);
+    doc.text(`Booking ID: ${reference}`, { continued: false });
+    doc.text(`Name: ${contact.name || user.name}`);
+    doc.text(`Email: ${contact.email}`);
+    doc.text(`Amount: ${currencySymbol}${price}`);
+    doc.moveDown(1);
+
+    doc.fontSize(16).fillColor(brandGreen).text('TICKETS', { underline: true });
+    doc.moveDown(0.5);
+
+    doc.fontSize(12).fillColor(darkGray);
+    tickets.forEach((t) => {
+      doc.text(`${t.name.toUpperCase()} x${t.quantity}`);
     });
-  });
+    doc.moveDown(1.5);
 
-  const excelBuffer = await workbook.xlsx.writeBuffer();
+    const qrCodeBuffer = Buffer.from(qrCodeDataURL.split(',')[1], 'base64');
+    const qrX = (doc.page.width - 150) / 2;
+    doc.image(qrCodeBuffer, qrX, doc.y, { width: 150, height: 150 });
+    doc.moveDown(8);
+
+    doc.fontSize(10).fillColor(brandGreen).text('Scan this QR code at the event entrance', { align: 'center' });
+    doc.moveDown(1);
+
+    doc.fontSize(14).fillColor(brandRed).text(
+      `YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`,
+      { align: 'center' }
+    );
+
+    doc.end();
+  });
 
   // ✅ Prepare emails
   const customerEmail = {
@@ -313,11 +275,11 @@ async function processOrderWithTicket(orderData) {
                     </table>
 
                     <!-- CTA -->
-                    <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #666666;">📎 Your ticket is attached as an Excel file. Please present it at the event entrance.</p>
+                    <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #666666;">📎 Your ticket is attached as a PDF file with a scannable QR code. Please present it at the event entrance.</p>
                     
                     <!-- Tips -->
                     <div style="background-color: #fff3cd; border-left: 4px solid #DC143C; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                      <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>💡 Quick Tips:</strong><br>• Save this email and the attached Excel file<br>• Arrive 15 minutes before the event<br>• Keep your booking reference handy</p>
+                      <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.5;"><strong>💡 Quick Tips:</strong><br>• Save this email and the attached PDF ticket<br>• Show the QR code at the entrance for quick scanning<br>• Arrive 15 minutes before the event</p>
                     </div>
                   </td>
                 </tr>
@@ -338,9 +300,9 @@ async function processOrderWithTicket(orderData) {
     `,
     attachments: [
       {
-        filename: `ticket-${reference}.xlsx`,
-        content: excelBuffer,
-        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename: `ticket-${reference}.pdf`,
+        content: pdfBuffer,
+        contentType: "application/pdf",
       },
     ],
   };
