@@ -152,67 +152,180 @@ async function processOrderWithTicket(orderData) {
     margin: 2
   });
 
-  // ✅ Generate PDF Ticket
-  const pdfBuffer = await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  // ✅ Generate PDF using PDFKit
+    const doc = new PDFDocument({ size: [400, 530], margin: 0 });
     const chunks = [];
 
-    doc.on('data', chunk => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-
-    const brandGreen = '#228B22';
-    const brandRed = '#DC143C';
-    const lightGray = '#f9f9f9';
-    const darkGray = '#333333';
-
-    doc.fontSize(24).fillColor(brandRed).text('🎟️ BOOKING CONFIRMATION', { align: 'center' });
-    doc.moveDown(1);
-
-    doc.fontSize(16).fillColor(brandGreen).text('EVENT DETAILS', { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).fillColor(darkGray);
-    doc.text(`Event: ${title}`, { continued: false });
-    doc.text(`Date: ${formattedDate}`);
-    doc.text(`Time: ${startTime}`);
-    doc.text(`Location: ${location || 'TBA'}`);
-    doc.moveDown(1);
-
-    doc.fontSize(16).fillColor(brandGreen).text('BOOKING DETAILS', { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).fillColor(darkGray);
-    doc.text(`Booking ID: ${reference}`, { continued: false });
-    doc.text(`Name: ${contact.name || user.name}`);
-    doc.text(`Email: ${contact.email}`);
-    doc.text(`Amount: ${currencySymbol}${price}`);
-    doc.moveDown(1);
-
-    doc.fontSize(16).fillColor(brandGreen).text('TICKETS', { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).fillColor(darkGray);
-    tickets.forEach((t) => {
-      doc.text(`${t.name.toUpperCase()} x${t.quantity}`);
+    doc.on("data", (chunk) => chunks.push(chunk));
+    const pdfPromise = new Promise((resolve, reject) => {
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
     });
-    doc.moveDown(1.5);
 
-    const qrCodeBuffer = Buffer.from(qrCodeDataURL.split(',')[1], 'base64');
-    const qrX = (doc.page.width - 150) / 2;
-    doc.image(qrCodeBuffer, qrX, doc.y, { width: 150, height: 150 });
-    doc.moveDown(8);
+    const w = doc.page.width;
+    const h = doc.page.height;
 
-    doc.fontSize(10).fillColor(brandGreen).text('Scan this QR code at the event entrance', { align: 'center' });
-    doc.moveDown(1);
+    // === Outer Red Border ===
+    doc
+      .rect(15, 15, w - 30, h - 30)
+      .lineWidth(8)
+      .strokeColor("#DC143C")
+      .stroke();
 
-    doc.fontSize(14).fillColor(brandRed).text(
-      `YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`,
-      { align: 'center' }
-    );
+    // === Inner Green Border ===
+    doc
+      .rect(25, 25, w - 50, h - 50)
+      .lineWidth(4)
+      .strokeColor("#228B22")
+      .stroke();
+
+    // === Top Info Box ===
+    const infoBoxX = 45,
+      infoBoxY = 45,
+      infoBoxW = 220,
+      infoBoxH = 110;
+    doc
+      .roundedRect(infoBoxX, infoBoxY, infoBoxW, infoBoxH, 15)
+      .lineWidth(3)
+      .strokeColor("#228B22")
+      .stroke();
+
+    // Date, Time, Booking ID
+    doc
+      .fontSize(20)
+      .fillColor("#000000")
+      .font("Helvetica-Bold")
+      .text(formattedDate, infoBoxX + 15, infoBoxY + 15, {
+        width: infoBoxW - 30,
+        align: "center",
+      });
+
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .text(startTime, infoBoxX + 15, infoBoxY + 45, {
+        width: infoBoxW - 30,
+        align: "center",
+      });
+
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .text("BOOKING ID", infoBoxX + 15, infoBoxY + 65, {
+        width: infoBoxW - 30,
+        align: "center",
+      });
+
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .text(reference, infoBoxX + 15, infoBoxY + 80, {
+        width: infoBoxW - 30,
+        align: "center",
+      });
+
+    // === QR Code ===
+    try {
+      const qrDataUrl = await QRCode.toDataURL(reference, {
+        width: 80,
+        margin: 1,
+      });
+      const qrImage = Buffer.from(qrDataUrl.split(",")[1], "base64");
+      doc.image(qrImage, w - 110, 55, { width: 70 });
+    } catch (error) {
+      console.log("QR code generation failed:", error);
+    }
+
+    // === Section Title ===
+    const titleY = 180;
+    doc
+      .fontSize(16)
+      .fillColor("#000000")
+      .font("Helvetica-Bold")
+      .text("BOOKING CONFIRMATION", 45, titleY);
+    doc
+      .moveTo(45, titleY + 20)
+      .lineTo(w - 45, titleY + 20)
+      .lineWidth(2)
+      .strokeColor("#228B22")
+      .stroke();
+
+    // === Field Drawing Function ===
+    function drawField(label, value, y, isTicket = false) {
+      const labelWidth = 80;
+      const valueWidth = w - 130 - labelWidth;
+      const fieldHeight = isTicket ? 60 : 35;
+
+      // Green label box
+      doc
+        .roundedRect(45, y, labelWidth, fieldHeight, 8)
+        .fillAndStroke("#228B22", "#228B22");
+      doc
+        .fillColor("#FFFFFF")
+        .font("Helvetica-Bold")
+        .fontSize(11)
+        .text(label, 45 + 10, y + (isTicket ? 20 : 12), {
+          width: labelWidth - 20,
+          align: "center",
+        });
+
+      // Value box
+      doc
+        .roundedRect(45 + labelWidth + 10, y, valueWidth, fieldHeight, 8)
+        .lineWidth(2)
+        .strokeColor("#228B22")
+        .fillAndStroke("#FFFFFF", "#228B22");
+
+      doc
+        .fillColor("#000000")
+        .font("Helvetica")
+        .fontSize(11)
+        .text(value, 45 + labelWidth + 20, y + (isTicket ? 10 : 12), {
+          width: valueWidth - 20,
+          align: "left",
+        });
+    }
+
+    // === Draw All Fields ===
+    let currentY = 220;
+    drawField("NAME", contact.name || user.name, currentY);
+    currentY += 50;
+    drawField("EMAIL", contact.email, currentY);
+    currentY += 50;
+    drawField("AMOUNT", `${currencySymbol}${price}`, currentY);
+
+    currentY += 50;
+    drawField("TICKET", ticketList, currentY, true);
+
+    // === Footer Text ===
+    const footerTextY = h - 80; // Place footer text slightly higher from the bottom
+    doc
+      .fontSize(10)
+      .fillColor("#DC143C")
+      .font("Helvetica-Bold")
+      .text(
+        `YOUR BOOKING FOR ${title.toUpperCase()} HAS BEEN CONFIRMED`,
+        45,
+        footerTextY,
+        {
+          width: w - 90,
+          align: "center",
+        }
+      );
+
+    // === Logo ===
+    const logoPath = path.join(__dirname, "views", "IMG_0264.png");
+    if (fs.existsSync(logoPath)) {
+      try {
+        const logoY = footerTextY + 20; // 20px below the text
+        doc.image(logoPath, w / 2 - 15, logoY, { width: 30 });
+      } catch (error) {
+        console.log("Logo loading failed:", error);
+      }
+    }
 
     doc.end();
-  });
+    const pdfBuffer = await pdfPromise;
 
   // ✅ Prepare emails
   const customerEmail = {
