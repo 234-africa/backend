@@ -635,21 +635,23 @@ router.get("/verify/:reference", async (req, res) => {
   }
 });
 
-// ✅ Paystack Webhook Handler - Ensures transactions are confirmed even if frontend fails
-router.post("/webhook/paystack", async (req, res) => {
+// ✅ Paystack Webhook Handler (exported for direct app registration with raw body parser)
+const paystackWebhookHandler = async (req, res) => {
   const crypto = require("crypto");
+  
+  const rawBody = req.body.toString('utf8');
   const hash = crypto
     .createHmac("sha512", PAYSTACK_SECRET_KEY)
-    .update(JSON.stringify(req.body))
+    .update(rawBody)
     .digest("hex");
 
   if (hash === req.headers["x-paystack-signature"]) {
-    const event = req.body;
+    const event = JSON.parse(rawBody);
     
     if (event.event === "charge.success") {
       const { reference, metadata } = event.data;
       
-      console.log(`✅ Webhook received for reference: ${reference}`);
+      console.log(`✅ Paystack webhook received for reference: ${reference}`);
       
       // ✅ Respond immediately to Paystack (prevent timeout)
       res.sendStatus(200);
@@ -667,7 +669,7 @@ router.post("/webhook/paystack", async (req, res) => {
           
           // ✅ If metadata exists, create order from webhook
           if (metadata && metadata.orderData) {
-            console.log(`📦 Creating order from webhook for reference: ${reference}`);
+            console.log(`📦 Creating order from Paystack webhook for reference: ${reference}`);
             
             const orderData = {
               ...metadata.orderData,
@@ -677,22 +679,23 @@ router.post("/webhook/paystack", async (req, res) => {
             
             // ✅ Process order (promo code handled inside helper function)
             await processOrderWithTicket(orderData);
-            console.log(`✅ Order created successfully from webhook: ${reference}`);
+            console.log(`✅ Order created successfully from Paystack webhook: ${reference}`);
           } else {
             console.log(`⚠️ No metadata found for reference: ${reference}. Waiting for frontend to create order.`);
           }
         } catch (error) {
-          console.error("❌ Webhook order processing error:", error);
+          console.error("❌ Paystack webhook order processing error:", error);
         }
       });
     } else {
       res.sendStatus(200);
     }
   } else {
-    console.error("❌ Invalid webhook signature");
+    console.error("❌ Invalid Paystack webhook signature");
+    console.error("❌ Expected hash does not match received signature");
     res.sendStatus(400);
   }
-});
+};
 
 // ✅ Stripe Payment Intent - Initialize Payment
 router.post("/stripe/create-payment-intent", async (req, res) => {
@@ -1018,6 +1021,7 @@ router.post("/order", async (req, res) => {
   }
 });
 
-router.stripeWebhookHandler = stripeWebhookHandler;
-router.fincraWebhookHandler = fincraWebhookHandler;
 module.exports = router;
+module.exports.paystackWebhookHandler = paystackWebhookHandler;
+module.exports.stripeWebhookHandler = stripeWebhookHandler;
+module.exports.fincraWebhookHandler = fincraWebhookHandler;
