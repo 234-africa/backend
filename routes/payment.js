@@ -15,6 +15,9 @@ const PromoCode = require("../models/promoCode");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY;
+const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY;
+const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET;
 
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
@@ -59,7 +62,11 @@ function getCurrencySymbol(currency) {
     USD: "$",
     GBP: "£",
     EUR: "€",
-    GHS: "GH₵"
+    GHS: "GH₵",
+    KES: "KSh",
+    UGX: "USh",
+    ZMW: "ZK",
+    ZAR: "R"
   };
   return symbols[currency] || "₦";
 }
@@ -783,6 +790,143 @@ const stripeWebhookHandler = async (req, res) => {
   }
 };
 
+// ✅ Fincra Create Checkout - Initialize Payment
+router.post("/fincra/create-checkout", async (req, res) => {
+  const { email, amount, metadata, currency } = req.body;
+
+  try {
+    const requestedCurrency = (currency || "NGN").toUpperCase();
+    
+    const FINCRA_SUPPORTED_CURRENCIES = ["NGN", "GHS", "KES", "UGX", "ZMW", "USD", "GBP", "EUR", "ZAR"];
+    
+    if (!FINCRA_SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
+      return res.status(400).json({ 
+        error: `Currency '${requestedCurrency}' is not supported by Fincra. Please use one of: NGN, GHS, KES, UGX, ZMW, USD, GBP, EUR, ZAR.`,
+        supportedCurrencies: FINCRA_SUPPORTED_CURRENCIES
+      });
+    }
+
+    const fincraApiUrl = process.env.NODE_ENV === 'production' && FINCRA_SECRET_KEY?.includes('live') 
+      ? "https://api.fincra.com" 
+      : "https://sandboxapi.fincra.com";
+
+    const checkoutData = {
+      amount: Math.round(amount),
+      currency: requestedCurrency,
+      customer: {
+        name: metadata?.orderData?.contact?.name || "Customer",
+        email: email,
+        phoneNumber: metadata?.orderData?.contact?.phone || "",
+      },
+      feeBearer: "customer",
+      paymentMethods: ["card", "bank_transfer", "mobile_money"],
+      redirectUrl: `${process.env.FRONTEND_URL}/payment-success`,
+    };
+
+    if (metadata) {
+      checkoutData.metadata = {
+        ...metadata,
+        currency: requestedCurrency,
+      };
+    }
+
+    const response = await axios.post(
+      `${fincraApiUrl}/checkout/payments`,
+      checkoutData,
+      {
+        headers: {
+          "api-key": FINCRA_SECRET_KEY,
+          "x-pub-key": FINCRA_PUBLIC_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    res.status(200).json({
+      status: true,
+      data: {
+        checkout_url: response.data.data.link,
+        reference: response.data.data.reference || response.data.data.payCode,
+      },
+    });
+    
+    console.log("✅ Fincra Checkout created:", response.data.data.payCode);
+  } catch (error) {
+    console.error("❌ Fincra Checkout Error:", error?.response?.data || error.message);
+    res.status(500).json({ error: "Failed to create Fincra checkout" });
+  }
+});
+
+// ✅ Fincra Webhook Handler (exported for direct app registration)
+const fincraWebhookHandler = async (req, res) => {
+  const crypto = require("crypto");
+  const signature = req.headers["signature"];
+
+  if (!signature) {
+    console.error("❌ Fincra webhook: No signature header found");
+    return res.status(400).send("No signature header");
+  }
+
+  try {
+    const rawBody = req.body.toString('utf8');
+    
+    const hash = crypto
+      .createHmac("sha512", FINCRA_WEBHOOK_SECRET)
+      .update(rawBody)
+      .digest("hex");
+
+    if (hash !== signature) {
+      console.error("❌ Fincra webhook signature verification failed");
+      console.error("Expected:", hash);
+      console.error("Received:", signature);
+      return res.status(400).send("Invalid signature");
+    }
+
+    const event = JSON.parse(rawBody);
+    
+    if (event.event === "charge.successful") {
+      const paymentData = event.data;
+      const reference = paymentData.reference;
+      const merchantReference = paymentData.merchantReference;
+      
+      console.log(`✅ Fincra webhook received for reference: ${reference}`);
+      
+      res.sendStatus(200);
+      
+      setImmediate(async () => {
+        try {
+          const existingOrder = await Order.findOne({ reference });
+          
+          if (existingOrder) {
+            console.log(`✅ Order already exists for Fincra payment: ${reference}`);
+            return;
+          }
+          
+          if (paymentData.metadata && paymentData.metadata.orderData) {
+            console.log(`📦 Creating order from Fincra webhook: ${reference}`);
+            
+            const orderData = paymentData.metadata.orderData;
+            orderData.reference = reference;
+            orderData.currency = paymentData.currency || paymentData.metadata.currency || "NGN";
+            
+            await processOrderWithTicket(orderData);
+            console.log(`✅ Order created successfully from Fincra webhook: ${reference}`);
+          } else {
+            console.log(`⚠️ No metadata found for Fincra payment: ${reference}`);
+          }
+        } catch (error) {
+          console.error("❌ Fincra webhook order processing error:", error);
+        }
+      });
+    } else {
+      res.sendStatus(200);
+    }
+  } catch (err) {
+    console.error("❌ Fincra webhook error:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+};
+
 // GET /api/order/:reference
 router.get("/order/:reference", async (req, res) => {
   const { reference } = req.params;
@@ -875,4 +1019,5 @@ router.post("/order", async (req, res) => {
 });
 
 router.stripeWebhookHandler = stripeWebhookHandler;
+router.fincraWebhookHandler = fincraWebhookHandler;
 module.exports = router;
