@@ -18,8 +18,10 @@ Fincra supports the following currencies:
 ## Payment Method Selection Logic
 The system automatically selects the appropriate payment gateway based on currency:
 - **Paystack**: NGN, GHS
-- **Fincra**: KES, UGX, ZMW, ZAR
-- **Stripe**: USD, GBP, EUR
+- **Fincra**: USD, GBP, EUR, KES, UGX, ZMW, ZAR
+- **Stripe**: Fallback for any other unsupported currencies
+
+Note: The gateway selection logic is implemented in `frontend/src/helpers/currency.js`.
 
 ## Setup Instructions
 
