@@ -33,6 +33,7 @@ app.use(cookieParser());
 
 const paymentRoutes = require("./routes/payment");
 app.post("/api/webhook/stripe", express.raw({ type: "application/json" }), paymentRoutes.stripeWebhookHandler);
+app.post("/api/webhook/fincra", express.raw({ type: "application/json" }), paymentRoutes.fincraWebhookHandler);
 
 app.use(bodyParser.json());
 app.use(passport.initialize());
