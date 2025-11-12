@@ -1021,7 +1021,9 @@ router.post("/order", async (req, res) => {
   }
 });
 
-module.exports = router;
-module.exports.paystackWebhookHandler = paystackWebhookHandler;
-module.exports.stripeWebhookHandler = stripeWebhookHandler;
-module.exports.fincraWebhookHandler = fincraWebhookHandler;
+module.exports = {
+  router,
+  paystackWebhookHandler,
+  stripeWebhookHandler,
+  fincraWebhookHandler,
+};
