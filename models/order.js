@@ -6,6 +6,11 @@ const Schema = mongoose.Schema;
 const ticketSchema = new mongoose.Schema({
   name: String,
   quantity: Number,
+  type: {
+    type: String,
+    enum: ["limited", "unlimited"],
+    default: "limited",
+  },
 });
 
 const OrderSchema = new mongoose.Schema({
