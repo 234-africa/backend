@@ -31,10 +31,11 @@ app.use(morgan("combined"));
 app.use(cors());
 app.use(cookieParser());
 
-const { router: paymentRoutes, paystackWebhookHandler, stripeWebhookHandler, fincraWebhookHandler } = require("./routes/payment");
+const { router: paymentRoutes, paystackWebhookHandler, stripeWebhookHandler, fincraWebhookHandler, alatpayWebhookHandler } = require("./routes/payment");
 app.post("/api/webhook/paystack", express.raw({ type: "application/json" }), paystackWebhookHandler);
 app.post("/api/webhook/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
 app.post("/api/webhook/fincra", express.raw({ type: "application/json" }), fincraWebhookHandler);
+app.post("/api/webhook/alatpay", express.raw({ type: "application/json" }), alatpayWebhookHandler);
 
 app.use(bodyParser.json());
 app.use(passport.initialize());
