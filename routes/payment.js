@@ -19,6 +19,11 @@ const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY;
 const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY;
 const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET;
 
+// Alat Pay Configuration
+const ALATPAY_API_KEY = process.env.ALATPAY_API_KEY;
+const ALATPAY_BUSINESS_ID = process.env.ALATPAY_BUSINESS_ID;
+const ALATPAY_WEBHOOK_SECRET = process.env.ALATPAY_WEBHOOK_SECRET;
+
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
   if (!process.env.GOOGLE_APP_EMAIL || !process.env.GOOGLE_APP_PW) {
@@ -930,6 +935,173 @@ const fincraWebhookHandler = async (req, res) => {
   }
 };
 
+// ✅ Alat Pay Create Checkout - Initialize Payment (NGN only)
+router.post("/alatpay/create-checkout", async (req, res) => {
+  const { email, amount, metadata, currency } = req.body;
+
+  try {
+    const requestedCurrency = (currency || "NGN").toUpperCase();
+    
+    // Alat Pay only supports NGN
+    if (requestedCurrency !== "NGN") {
+      return res.status(400).json({ 
+        error: `Currency '${requestedCurrency}' is not supported by Alat Pay. Alat Pay only supports NGN (Nigerian Naira).`,
+        supportedCurrencies: ["NGN"]
+      });
+    }
+
+    if (!ALATPAY_API_KEY || !ALATPAY_BUSINESS_ID) {
+      console.error("❌ Alat Pay credentials not configured");
+      return res.status(500).json({ error: "Alat Pay is not configured. Please contact support." });
+    }
+
+    const alatpayApiUrl = "https://apibox.alatpay.ng";
+    
+    // Generate unique order reference
+    const orderReference = `ALAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const checkoutData = {
+      businessId: ALATPAY_BUSINESS_ID,
+      amount: Math.round(amount),
+      currency: "NGN",
+      orderId: orderReference,
+      description: metadata?.orderData?.title || "234Africa Checkout Payment",
+      customer: {
+        email: email,
+        phone: metadata?.orderData?.contact?.phone || "",
+        firstName: metadata?.orderData?.contact?.name?.split(' ')[0] || "Customer",
+        lastName: metadata?.orderData?.contact?.name?.split(' ').slice(1).join(' ') || "",
+        metadata: JSON.stringify(metadata || {})
+      },
+      callbackUrl: `${process.env.FRONTEND_URL}/payment-success`,
+      channel: "*"
+    };
+
+    console.log("📤 Alat Pay checkout request:", JSON.stringify(checkoutData, null, 2));
+
+    const response = await axios.post(
+      `${alatpayApiUrl}/api/v1/merchant/transactions/initiate`,
+      checkoutData,
+      {
+        headers: {
+          "Authorization": `Bearer ${ALATPAY_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("📥 Alat Pay response:", JSON.stringify(response.data, null, 2));
+
+    if (response.data && response.data.data) {
+      const paymentData = response.data.data;
+      
+      res.status(200).json({
+        status: true,
+        data: {
+          checkout_url: paymentData.checkoutUrl || paymentData.paymentLink || paymentData.link,
+          reference: paymentData.transactionId || paymentData.reference || orderReference,
+        },
+      });
+      
+      console.log("✅ Alat Pay Checkout created:", orderReference);
+    } else {
+      console.error("❌ Unexpected Alat Pay response format:", response.data);
+      res.status(500).json({ error: "Unexpected response from Alat Pay" });
+    }
+  } catch (error) {
+    console.error("❌ Alat Pay Checkout Error:", error?.response?.data || error.message);
+    console.error("❌ Full error:", error);
+    res.status(500).json({ error: "Failed to create Alat Pay checkout" });
+  }
+});
+
+// ✅ Alat Pay Webhook Handler (exported for direct app registration)
+const alatpayWebhookHandler = async (req, res) => {
+  const crypto = require("crypto");
+  
+  try {
+    const rawBody = req.body.toString('utf8');
+    const signature = req.headers["x-alatpay-signature"] || req.headers["signature"];
+    
+    // Verify webhook signature if secret is configured
+    if (ALATPAY_WEBHOOK_SECRET && signature) {
+      const hash = crypto
+        .createHmac("sha512", ALATPAY_WEBHOOK_SECRET)
+        .update(rawBody)
+        .digest("hex");
+
+      if (hash !== signature) {
+        console.error("❌ Alat Pay webhook signature verification failed");
+        return res.status(400).send("Invalid signature");
+      }
+    }
+
+    const event = JSON.parse(rawBody);
+    
+    console.log("📥 Alat Pay webhook received:", JSON.stringify(event, null, 2));
+    
+    // Check for successful payment events
+    const isSuccessful = 
+      event.event === "transaction.successful" || 
+      event.event === "charge.successful" ||
+      event.status === "successful" ||
+      event.data?.status === "successful";
+    
+    if (isSuccessful) {
+      const paymentData = event.data || event;
+      const reference = paymentData.transactionId || paymentData.reference || paymentData.orderId;
+      
+      console.log(`✅ Alat Pay webhook received for reference: ${reference}`);
+      
+      // Respond immediately
+      res.sendStatus(200);
+      
+      // Process order asynchronously
+      setImmediate(async () => {
+        try {
+          const existingOrder = await Order.findOne({ reference });
+          
+          if (existingOrder) {
+            console.log(`✅ Order already exists for Alat Pay payment: ${reference}`);
+            return;
+          }
+          
+          // Parse metadata from customer field if present
+          let orderMetadata = null;
+          if (paymentData.customer?.metadata) {
+            try {
+              orderMetadata = JSON.parse(paymentData.customer.metadata);
+            } catch (e) {
+              console.log("⚠️ Could not parse Alat Pay metadata");
+            }
+          }
+          
+          if (orderMetadata && orderMetadata.orderData) {
+            console.log(`📦 Creating order from Alat Pay webhook: ${reference}`);
+            
+            const orderData = orderMetadata.orderData;
+            orderData.reference = reference;
+            orderData.currency = "NGN";
+            
+            await processOrderWithTicket(orderData);
+            console.log(`✅ Order created successfully from Alat Pay webhook: ${reference}`);
+          } else {
+            console.log(`⚠️ No metadata found for Alat Pay payment: ${reference}. Waiting for frontend to create order.`);
+          }
+        } catch (error) {
+          console.error("❌ Alat Pay webhook order processing error:", error);
+        }
+      });
+    } else {
+      console.log(`ℹ️ Alat Pay webhook event (non-success): ${event.event || event.status}`);
+      res.sendStatus(200);
+    }
+  } catch (err) {
+    console.error("❌ Alat Pay webhook error:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+};
+
 // GET /api/order/:reference
 router.get("/order/:reference", async (req, res) => {
   const { reference } = req.params;
@@ -1026,4 +1198,5 @@ module.exports = {
   paystackWebhookHandler,
   stripeWebhookHandler,
   fincraWebhookHandler,
+  alatpayWebhookHandler,
 };
