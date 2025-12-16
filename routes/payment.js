@@ -798,11 +798,17 @@ const stripeWebhookHandler = async (req, res) => {
   }
 };
 
-// ✅ Fincra Create Checkout - Initialize Payment
+// ✅ Fincra Create Checkout - Initialize Payment (2025 Official API)
 router.post("/fincra/create-checkout", async (req, res) => {
   const { email, amount, metadata, currency } = req.body;
 
   try {
+    // ✅ Check if Fincra credentials are configured
+    if (!FINCRA_SECRET_KEY || !FINCRA_PUBLIC_KEY) {
+      console.error("❌ Fincra credentials not configured - FINCRA_SECRET_KEY:", !!FINCRA_SECRET_KEY, "FINCRA_PUBLIC_KEY:", !!FINCRA_PUBLIC_KEY);
+      return res.status(500).json({ error: "Fincra is not configured. Please contact support." });
+    }
+
     const requestedCurrency = (currency || "NGN").toUpperCase();
     
     const FINCRA_SUPPORTED_CURRENCIES = ["NGN", "GHS", "KES", "UGX", "ZMW", "USD", "GBP", "EUR", "ZAR"];
@@ -814,9 +820,38 @@ router.post("/fincra/create-checkout", async (req, res) => {
       });
     }
 
-    const fincraApiUrl = process.env.NODE_ENV === 'production' && FINCRA_SECRET_KEY?.includes('live') 
-      ? "https://api.fincra.com" 
-      : "https://sandboxapi.fincra.com";
+    // ✅ Environment-aware API URL (sandbox vs production)
+    const isLiveKey = FINCRA_SECRET_KEY && (FINCRA_SECRET_KEY.startsWith('sk_live') || FINCRA_SECRET_KEY.includes('live'));
+    const fincraApiUrl = isLiveKey ? "https://api.fincra.com" : "https://sandboxapi.fincra.com";
+
+    // ✅ Generate unique reference for this transaction
+    const reference = `FCR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // ✅ Determine payment methods based on currency (per Fincra 2025 official docs)
+    let paymentMethods = [];
+    switch (requestedCurrency) {
+      case "NGN":
+        paymentMethods = ["card", "bank_transfer"];
+        break;
+      case "GHS":
+      case "KES":
+      case "UGX":
+        paymentMethods = ["mobile_money"];
+        break;
+      case "ZMW":
+        paymentMethods = ["mobile_money", "card"];
+        break;
+      case "ZAR":
+        paymentMethods = ["bank_transfer", "card"];
+        break;
+      case "USD":
+      case "GBP":
+      case "EUR":
+        paymentMethods = ["card"];
+        break;
+      default:
+        paymentMethods = ["card"];
+    }
 
     const checkoutData = {
       amount: Math.round(amount),
@@ -826,8 +861,9 @@ router.post("/fincra/create-checkout", async (req, res) => {
         email: email,
         phoneNumber: metadata?.orderData?.contact?.phone || "",
       },
+      reference: reference,
       feeBearer: "customer",
-      paymentMethods: ["card", "bank_transfer", "mobile_money"],
+      paymentMethods: paymentMethods,
       redirectUrl: `${process.env.FRONTEND_URL}/payment-success`,
     };
 
@@ -838,11 +874,14 @@ router.post("/fincra/create-checkout", async (req, res) => {
       };
     }
 
+    console.log("📤 Fincra checkout request:", JSON.stringify(checkoutData, null, 2));
+
     const response = await axios.post(
       `${fincraApiUrl}/checkout/payments`,
       checkoutData,
       {
         headers: {
+          "accept": "application/json",
           "api-key": FINCRA_SECRET_KEY,
           "x-pub-key": FINCRA_PUBLIC_KEY,
           "Content-Type": "application/json",
@@ -850,18 +889,27 @@ router.post("/fincra/create-checkout", async (req, res) => {
       }
     );
 
-    res.status(200).json({
-      status: true,
-      data: {
-        checkout_url: response.data.data.link,
-        reference: response.data.data.reference || response.data.data.payCode,
-      },
-    });
-    
-    console.log("✅ Fincra Checkout created:", response.data.data.payCode);
+    console.log("📥 Fincra response:", JSON.stringify(response.data, null, 2));
+
+    if (response.data && response.data.status === true && response.data.data) {
+      res.status(200).json({
+        status: true,
+        data: {
+          checkout_url: response.data.data.link,
+          reference: response.data.data.reference || response.data.data.payCode || reference,
+        },
+      });
+      
+      console.log("✅ Fincra Checkout created:", response.data.data.payCode);
+    } else {
+      console.error("❌ Unexpected Fincra response:", response.data);
+      res.status(500).json({ error: "Unexpected response from Fincra" });
+    }
   } catch (error) {
     console.error("❌ Fincra Checkout Error:", error?.response?.data || error.message);
-    res.status(500).json({ error: "Failed to create Fincra checkout" });
+    console.error("❌ Fincra Full Error:", JSON.stringify(error?.response?.data, null, 2));
+    const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error.message || "Failed to create Fincra checkout";
+    res.status(500).json({ error: errorMessage });
   }
 });
 
@@ -935,83 +983,55 @@ const fincraWebhookHandler = async (req, res) => {
   }
 };
 
-// ✅ Alat Pay Create Checkout - Initialize Payment (NGN only)
+// ✅ Alat Pay - Returns configuration for frontend inline popup (2025 Official API)
+// AlatPay uses frontend SDK popup like Paystack, not backend redirect
 router.post("/alatpay/create-checkout", async (req, res) => {
   const { email, amount, metadata, currency } = req.body;
 
   try {
     const requestedCurrency = (currency || "NGN").toUpperCase();
     
-    // Alat Pay only supports NGN
+    // AlatPay supports NGN (per official docs at docs.alatpay.ng)
     if (requestedCurrency !== "NGN") {
       return res.status(400).json({ 
-        error: `Currency '${requestedCurrency}' is not supported by Alat Pay. Alat Pay only supports NGN (Nigerian Naira).`,
+        error: `Currency '${requestedCurrency}' is not supported by Alat Pay. Alat Pay only supports NGN.`,
         supportedCurrencies: ["NGN"]
       });
     }
 
     if (!ALATPAY_API_KEY || !ALATPAY_BUSINESS_ID) {
-      console.error("❌ Alat Pay credentials not configured");
+      console.error("❌ Alat Pay credentials not configured - ALATPAY_API_KEY:", !!ALATPAY_API_KEY, "ALATPAY_BUSINESS_ID:", !!ALATPAY_BUSINESS_ID);
       return res.status(500).json({ error: "Alat Pay is not configured. Please contact support." });
     }
 
-    const alatpayApiUrl = "https://apibox.alatpay.ng";
-    
     // Generate unique order reference
     const orderReference = `ALAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const checkoutData = {
-      businessId: ALATPAY_BUSINESS_ID,
-      amount: Math.round(amount),
-      currency: "NGN",
-      orderId: orderReference,
-      description: metadata?.orderData?.title || "234Africa Checkout Payment",
-      customer: {
+    // ✅ AlatPay uses frontend inline popup SDK - return config for frontend
+    // The frontend will use react-alatpay or similar SDK to open the payment popup
+    res.status(200).json({
+      status: true,
+      data: {
+        apiKey: ALATPAY_API_KEY,
+        businessId: ALATPAY_BUSINESS_ID,
+        amount: Math.round(amount),
+        currency: "NGN",
         email: email,
         phone: metadata?.orderData?.contact?.phone || "",
         firstName: metadata?.orderData?.contact?.name?.split(' ')[0] || "Customer",
         lastName: metadata?.orderData?.contact?.name?.split(' ').slice(1).join(' ') || "",
-        metadata: JSON.stringify(metadata || {})
+        reference: orderReference,
+        metadata: {
+          orderId: orderReference,
+          orderData: metadata?.orderData || {},
+        }
       },
-      callbackUrl: `${process.env.FRONTEND_URL}/payment-success`,
-      channel: "*"
-    };
-
-    console.log("📤 Alat Pay checkout request:", JSON.stringify(checkoutData, null, 2));
-
-    const response = await axios.post(
-      `${alatpayApiUrl}/api/v1/merchant/transactions/initiate`,
-      checkoutData,
-      {
-        headers: {
-          "Authorization": `Bearer ${ALATPAY_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    console.log("📥 Alat Pay response:", JSON.stringify(response.data, null, 2));
-
-    if (response.data && response.data.data) {
-      const paymentData = response.data.data;
-      
-      res.status(200).json({
-        status: true,
-        data: {
-          checkout_url: paymentData.checkoutUrl || paymentData.paymentLink || paymentData.link,
-          reference: paymentData.transactionId || paymentData.reference || orderReference,
-        },
-      });
-      
-      console.log("✅ Alat Pay Checkout created:", orderReference);
-    } else {
-      console.error("❌ Unexpected Alat Pay response format:", response.data);
-      res.status(500).json({ error: "Unexpected response from Alat Pay" });
-    }
+    });
+    
+    console.log("✅ Alat Pay config generated for frontend popup:", orderReference);
   } catch (error) {
-    console.error("❌ Alat Pay Checkout Error:", error?.response?.data || error.message);
-    console.error("❌ Full error:", error);
-    res.status(500).json({ error: "Failed to create Alat Pay checkout" });
+    console.error("❌ Alat Pay Config Error:", error.message);
+    res.status(500).json({ error: "Failed to initialize Alat Pay" });
   }
 });
 
