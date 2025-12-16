@@ -882,8 +882,29 @@ router.post("/fincra/create-checkout", async (req, res) => {
     }
 
     // ✅ Environment-aware API URL (sandbox vs production)
-    const isLiveKey = FINCRA_SECRET_KEY && (FINCRA_SECRET_KEY.startsWith('sk_live') || FINCRA_SECRET_KEY.includes('live'));
+    // Check multiple indicators for live mode:
+    // 1. Explicit FINCRA_LIVE_MODE env var (most reliable)
+    // 2. NODE_ENV === 'production'
+    // 3. Key patterns (sk_live, pk_live, or contains 'live')
+    // 4. Keys that don't start with test/sandbox patterns (sk_test, pk_test)
+    const explicitLiveMode = process.env.FINCRA_LIVE_MODE === 'true' || process.env.FINCRA_LIVE_MODE === '1';
+    const isProductionEnv = process.env.NODE_ENV === 'production';
+    const secretKeyIndicatesLive = FINCRA_SECRET_KEY && (
+      FINCRA_SECRET_KEY.startsWith('sk_live') || 
+      FINCRA_SECRET_KEY.includes('live') ||
+      (!FINCRA_SECRET_KEY.startsWith('sk_test') && !FINCRA_SECRET_KEY.includes('test') && !FINCRA_SECRET_KEY.includes('sandbox'))
+    );
+    const publicKeyIndicatesLive = FINCRA_PUBLIC_KEY && (
+      FINCRA_PUBLIC_KEY.startsWith('pk_live') || 
+      FINCRA_PUBLIC_KEY.includes('live') ||
+      (!FINCRA_PUBLIC_KEY.startsWith('pk_test') && !FINCRA_PUBLIC_KEY.includes('test') && !FINCRA_PUBLIC_KEY.includes('sandbox'))
+    );
+    
+    // Use live API if explicitly set, or in production env, or if keys indicate live mode
+    const isLiveKey = explicitLiveMode || isProductionEnv || secretKeyIndicatesLive || publicKeyIndicatesLive;
     const fincraApiUrl = isLiveKey ? "https://api.fincra.com" : "https://sandboxapi.fincra.com";
+    
+    console.log("🔧 Fincra Environment Detection - explicitLiveMode:", explicitLiveMode, "isProductionEnv:", isProductionEnv, "secretKeyIndicatesLive:", secretKeyIndicatesLive, "publicKeyIndicatesLive:", publicKeyIndicatesLive, "→ Using:", isLiveKey ? "LIVE" : "SANDBOX");
 
     // ✅ Generate unique merchant reference for this transaction
     const merchantReference = `FCR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
