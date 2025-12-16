@@ -910,7 +910,7 @@ router.post("/fincra/create-checkout", async (req, res) => {
     const merchantReference = `FCR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // ✅ Determine payment methods based on currency (per official Fincra docs)
-    // NGN: bank_transfer, card, payAttitude
+    // NGN: bank_transfer, card, payattitude
     // GHS, KES, UGX, TZS, XAF, XOF: mobile_money
     // ZMW: mobile_money, card
     // ZAR: bank_transfer, card
@@ -920,7 +920,7 @@ router.post("/fincra/create-checkout", async (req, res) => {
     
     switch (requestedCurrency) {
       case "NGN":
-        paymentMethods = ["bank_transfer", "card", "payAttitude"];
+        paymentMethods = ["bank_transfer", "card", "payattitude"];
         defaultPaymentMethod = "bank_transfer";
         break;
       case "GHS":
