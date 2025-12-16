@@ -5,7 +5,7 @@ Fincra has been integrated using the official Checkout Redirect API per https://
 
 ## Supported Currencies
 Per https://docs.fincra.com/docs/checkout-redirect:
-- **NGN** - Nigerian Naira (bank_transfer, card, payAttitude)
+- **NGN** - Nigerian Naira (bank_transfer, card, payattitude)
 - **GHS** - Ghanaian Cedi (mobile_money, bank_transfer)
 - **KES** - Kenyan Shilling (mobile_money)
 - **UGX** - Ugandan Shilling (mobile_money)
