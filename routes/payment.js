@@ -798,7 +798,8 @@ const stripeWebhookHandler = async (req, res) => {
   }
 };
 
-// ✅ Fincra Create Checkout - Initialize Payment (2025 Official API)
+// ✅ Fincra Create Checkout - Initialize Payment (Official Checkout Redirect API)
+// Documentation: https://docs.fincra.com/docs/checkout-redirect
 router.post("/fincra/create-checkout", async (req, res) => {
   const { email, amount, metadata, currency } = req.body;
 
@@ -811,11 +812,12 @@ router.post("/fincra/create-checkout", async (req, res) => {
 
     const requestedCurrency = (currency || "NGN").toUpperCase();
     
-    const FINCRA_SUPPORTED_CURRENCIES = ["NGN", "GHS", "KES", "UGX", "ZMW", "USD", "GBP", "EUR", "ZAR"];
+    // Per official docs: Supported currencies for checkout
+    const FINCRA_SUPPORTED_CURRENCIES = ["NGN", "GHS", "KES", "UGX", "ZMW", "ZAR", "USD", "XAF", "XOF", "TZS"];
     
     if (!FINCRA_SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
       return res.status(400).json({ 
-        error: `Currency '${requestedCurrency}' is not supported by Fincra. Please use one of: NGN, GHS, KES, UGX, ZMW, USD, GBP, EUR, ZAR.`,
+        error: `Currency '${requestedCurrency}' is not supported by Fincra. Please use one of: ${FINCRA_SUPPORTED_CURRENCIES.join(', ')}.`,
         supportedCurrencies: FINCRA_SUPPORTED_CURRENCIES
       });
     }
@@ -824,35 +826,53 @@ router.post("/fincra/create-checkout", async (req, res) => {
     const isLiveKey = FINCRA_SECRET_KEY && (FINCRA_SECRET_KEY.startsWith('sk_live') || FINCRA_SECRET_KEY.includes('live'));
     const fincraApiUrl = isLiveKey ? "https://api.fincra.com" : "https://sandboxapi.fincra.com";
 
-    // ✅ Generate unique reference for this transaction
-    const reference = `FCR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // ✅ Generate unique merchant reference for this transaction
+    const merchantReference = `FCR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // ✅ Determine payment methods based on currency (per Fincra 2025 official docs)
+    // ✅ Determine payment methods based on currency (per official Fincra docs)
+    // NGN: bank_transfer, card, payAttitude
+    // GHS, KES, UGX, TZS, XAF, XOF: mobile_money
+    // ZMW: mobile_money, card
+    // ZAR: bank_transfer, card
+    // USD: card
     let paymentMethods = [];
+    let defaultPaymentMethod = "card";
+    
     switch (requestedCurrency) {
       case "NGN":
-        paymentMethods = ["card", "bank_transfer"];
+        paymentMethods = ["bank_transfer", "card", "payAttitude"];
+        defaultPaymentMethod = "bank_transfer";
         break;
       case "GHS":
+        paymentMethods = ["mobile_money", "bank_transfer"];
+        defaultPaymentMethod = "mobile_money";
+        break;
       case "KES":
       case "UGX":
+      case "TZS":
+      case "XAF":
+      case "XOF":
         paymentMethods = ["mobile_money"];
+        defaultPaymentMethod = "mobile_money";
         break;
       case "ZMW":
         paymentMethods = ["mobile_money", "card"];
+        defaultPaymentMethod = "mobile_money";
         break;
       case "ZAR":
         paymentMethods = ["bank_transfer", "card"];
+        defaultPaymentMethod = "card";
         break;
       case "USD":
-      case "GBP":
-      case "EUR":
         paymentMethods = ["card"];
+        defaultPaymentMethod = "card";
         break;
       default:
         paymentMethods = ["card"];
+        defaultPaymentMethod = "card";
     }
 
+    // ✅ Build checkout payload per official Fincra Checkout Redirect API
     const checkoutData = {
       amount: Math.round(amount),
       currency: requestedCurrency,
@@ -861,12 +881,16 @@ router.post("/fincra/create-checkout", async (req, res) => {
         email: email,
         phoneNumber: metadata?.orderData?.contact?.phone || "",
       },
-      reference: reference,
+      reference: merchantReference,
       feeBearer: "customer",
       paymentMethods: paymentMethods,
+      defaultPaymentMethod: defaultPaymentMethod,
       redirectUrl: `${process.env.FRONTEND_URL}/payment-success`,
+      settlementDestination: "wallet",
+      successMessage: "Payment successful! Your ticket has been confirmed.",
     };
 
+    // Include metadata for webhook processing
     if (metadata) {
       checkoutData.metadata = {
         ...metadata,
@@ -875,6 +899,7 @@ router.post("/fincra/create-checkout", async (req, res) => {
     }
 
     console.log("📤 Fincra checkout request:", JSON.stringify(checkoutData, null, 2));
+    console.log("📤 Fincra API URL:", `${fincraApiUrl}/checkout/payments`);
 
     const response = await axios.post(
       `${fincraApiUrl}/checkout/payments`,
@@ -896,11 +921,12 @@ router.post("/fincra/create-checkout", async (req, res) => {
         status: true,
         data: {
           checkout_url: response.data.data.link,
-          reference: response.data.data.reference || response.data.data.payCode || reference,
+          reference: merchantReference,
+          payCode: response.data.data.payCode,
         },
       });
       
-      console.log("✅ Fincra Checkout created:", response.data.data.payCode);
+      console.log("✅ Fincra Checkout created - Link:", response.data.data.link, "PayCode:", response.data.data.payCode);
     } else {
       console.error("❌ Unexpected Fincra response:", response.data);
       res.status(500).json({ error: "Unexpected response from Fincra" });
@@ -983,19 +1009,21 @@ const fincraWebhookHandler = async (req, res) => {
   }
 };
 
-// ✅ Alat Pay - Returns configuration for frontend inline popup (2025 Official API)
-// AlatPay uses frontend SDK popup like Paystack, not backend redirect
+// ✅ Alat Pay - Returns configuration for frontend Web Plugin popup
+// Per official docs: https://docs.alatpay.ng/web-plugin
+// Uses frontend script: https://web.alatpay.ng/js/alatpay.js
+// Supports NGN and USD for cards, only NGN for other payment methods
 router.post("/alatpay/create-checkout", async (req, res) => {
   const { email, amount, metadata, currency } = req.body;
 
   try {
     const requestedCurrency = (currency || "NGN").toUpperCase();
     
-    // AlatPay supports NGN (per official docs at docs.alatpay.ng)
-    if (requestedCurrency !== "NGN") {
+    // Per docs.alatpay.ng/web-plugin: NGN and USD for cards, only NGN for other methods
+    if (!["NGN", "USD"].includes(requestedCurrency)) {
       return res.status(400).json({ 
-        error: `Currency '${requestedCurrency}' is not supported by Alat Pay. Alat Pay only supports NGN.`,
-        supportedCurrencies: ["NGN"]
+        error: `Currency '${requestedCurrency}' is not supported by Alat Pay. Alat Pay supports NGN and USD.`,
+        supportedCurrencies: ["NGN", "USD"]
       });
     }
 
@@ -1007,28 +1035,28 @@ router.post("/alatpay/create-checkout", async (req, res) => {
     // Generate unique order reference
     const orderReference = `ALAT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // ✅ AlatPay uses frontend inline popup SDK - return config for frontend
-    // The frontend will use react-alatpay or similar SDK to open the payment popup
+    // Per docs.alatpay.ng/web-plugin - return config for Alatpay.setup()
+    // Frontend uses: https://web.alatpay.ng/js/alatpay.js
     res.status(200).json({
       status: true,
       data: {
         apiKey: ALATPAY_API_KEY,
         businessId: ALATPAY_BUSINESS_ID,
         amount: Math.round(amount),
-        currency: "NGN",
+        currency: requestedCurrency,
         email: email,
         phone: metadata?.orderData?.contact?.phone || "",
         firstName: metadata?.orderData?.contact?.name?.split(' ')[0] || "Customer",
         lastName: metadata?.orderData?.contact?.name?.split(' ').slice(1).join(' ') || "",
         reference: orderReference,
-        metadata: {
+        metadata: JSON.stringify({
           orderId: orderReference,
           orderData: metadata?.orderData || {},
-        }
+        })
       },
     });
     
-    console.log("✅ Alat Pay config generated for frontend popup:", orderReference);
+    console.log("✅ Alat Pay config generated for Web Plugin:", orderReference);
   } catch (error) {
     console.error("❌ Alat Pay Config Error:", error.message);
     res.status(500).json({ error: "Failed to initialize Alat Pay" });
@@ -1036,40 +1064,51 @@ router.post("/alatpay/create-checkout", async (req, res) => {
 });
 
 // ✅ Alat Pay Webhook Handler (exported for direct app registration)
+// Per official docs: https://docs.alatpay.ng/webhook-validation
+// - Uses HMAC-SHA256 (NOT SHA512)
+// - Signature is Base64 encoded
+// - Header is "x-signature"
+// - IP whitelist: 74.178.162.156
 const alatpayWebhookHandler = async (req, res) => {
   const crypto = require("crypto");
   
   try {
     const rawBody = req.body.toString('utf8');
-    const signature = req.headers["x-alatpay-signature"] || req.headers["signature"];
+    const receivedSignature = req.headers["x-signature"];
     
-    // Verify webhook signature if secret is configured
-    if (ALATPAY_WEBHOOK_SECRET && signature) {
-      const hash = crypto
-        .createHmac("sha512", ALATPAY_WEBHOOK_SECRET)
+    // Verify webhook signature if secret is configured (per docs.alatpay.ng/webhook-validation)
+    if (ALATPAY_WEBHOOK_SECRET && receivedSignature) {
+      // AlatPay uses HMAC-SHA256 with Base64 encoding
+      const computedSignature = crypto
+        .createHmac("sha256", ALATPAY_WEBHOOK_SECRET)
         .update(rawBody)
-        .digest("hex");
+        .digest("base64");
 
-      if (hash !== signature) {
+      if (computedSignature !== receivedSignature) {
         console.error("❌ Alat Pay webhook signature verification failed");
-        return res.status(400).send("Invalid signature");
+        console.error("❌ Computed:", computedSignature);
+        console.error("❌ Received:", receivedSignature);
+        return res.status(401).send("Invalid signature");
       }
+      
+      console.log("✅ Alat Pay webhook signature verified");
     }
 
     const event = JSON.parse(rawBody);
     
     console.log("📥 Alat Pay webhook received:", JSON.stringify(event, null, 2));
     
-    // Check for successful payment events
+    // Per docs.alatpay.ng/setup-webhook-url, webhook payload structure is:
+    // { Value: { Data: {...}, Status: true, Message: "Success" }, StatusCode: 200 }
+    const webhookData = event.Value?.Data || event.data || event;
     const isSuccessful = 
-      event.event === "transaction.successful" || 
-      event.event === "charge.successful" ||
-      event.status === "successful" ||
-      event.data?.status === "successful";
+      event.Value?.Status === true ||
+      webhookData.Status === "completed" ||
+      webhookData.status === "completed" ||
+      event.status === "successful";
     
     if (isSuccessful) {
-      const paymentData = event.data || event;
-      const reference = paymentData.transactionId || paymentData.reference || paymentData.orderId;
+      const reference = webhookData.Id || webhookData.id || webhookData.OrderId || webhookData.orderId;
       
       console.log(`✅ Alat Pay webhook received for reference: ${reference}`);
       
@@ -1088,11 +1127,13 @@ const alatpayWebhookHandler = async (req, res) => {
           
           // Parse metadata from customer field if present
           let orderMetadata = null;
-          if (paymentData.customer?.metadata) {
+          const customerData = webhookData.Customer || webhookData.customer;
+          if (customerData?.Metadata || customerData?.metadata) {
             try {
-              orderMetadata = JSON.parse(paymentData.customer.metadata);
+              const metadataStr = customerData.Metadata || customerData.metadata;
+              orderMetadata = typeof metadataStr === 'string' ? JSON.parse(metadataStr) : metadataStr;
             } catch (e) {
-              console.log("⚠️ Could not parse Alat Pay metadata");
+              console.log("⚠️ Could not parse Alat Pay metadata:", e.message);
             }
           }
           
@@ -1101,7 +1142,7 @@ const alatpayWebhookHandler = async (req, res) => {
             
             const orderData = orderMetadata.orderData;
             orderData.reference = reference;
-            orderData.currency = "NGN";
+            orderData.currency = webhookData.Currency || webhookData.currency || "NGN";
             
             await processOrderWithTicket(orderData);
             console.log(`✅ Order created successfully from Alat Pay webhook: ${reference}`);
@@ -1113,7 +1154,7 @@ const alatpayWebhookHandler = async (req, res) => {
         }
       });
     } else {
-      console.log(`ℹ️ Alat Pay webhook event (non-success): ${event.event || event.status}`);
+      console.log(`ℹ️ Alat Pay webhook event (non-success):`, webhookData.Status || webhookData.status);
       res.sendStatus(200);
     }
   } catch (err) {
