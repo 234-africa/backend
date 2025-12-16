@@ -17,14 +17,70 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // Fincra Configuration - supports multiple env var naming conventions
-const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY || process.env.FINCRA_SECRET;
-const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY || process.env.FINCRA_PUBLICKEY;
-const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET || process.env.FINCRA_WEBHOOK;
+const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY || process.env.FINCRA_SECRET || process.env.FINCRA_SECRETKEY;
+const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY || process.env.FINCRA_PUBLICKEY || process.env.FINCRA_PUBLIC;
+const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET || process.env.FINCRA_WEBHOOK || process.env.FINCRA_WEBHOOK_KEY;
 
-// Alat Pay Configuration - supports multiple env var naming conventions
-const ALATPAY_API_KEY = process.env.ALATPAY_API_KEY || process.env.ALAT_PUBLICKEY || process.env.ALAT_API_KEY;
-const ALATPAY_BUSINESS_ID = process.env.ALATPAY_BUSINESS_ID || process.env.ALAT_BUSINESS_ID || process.env.ALAT_BUSINESSID;
-const ALATPAY_WEBHOOK_SECRET = process.env.ALATPAY_WEBHOOK_SECRET || process.env.ALAT_SECRET_KEY || process.env.ALAT_WEBHOOK_SECRET;
+// Debug logging for Fincra configuration (only logs presence, not values)
+console.log("🔧 Fincra Config Check - SECRET_KEY:", !!FINCRA_SECRET_KEY, "PUBLIC_KEY:", !!FINCRA_PUBLIC_KEY, "WEBHOOK_SECRET:", !!FINCRA_WEBHOOK_SECRET);
+
+// Log which specific env vars are set (for debugging config issues)
+const envVarsToCheck = [
+  // Fincra variants
+  'FINCRA_SECRET_KEY', 'FINCRA_SECRET', 'FINCRA_SECRETKEY',
+  'FINCRA_PUBLIC_KEY', 'FINCRA_PUBLICKEY', 'FINCRA_PUBLIC',
+  'FINCRA_WEBHOOK_SECRET', 'FINCRA_WEBHOOK', 'FINCRA_WEBHOOK_KEY',
+  // AlatPay API Key variants
+  'ALATPAY_API_KEY', 'ALATPAY_PUBLIC_KEY', 'ALAT_PUBLICKEY', 'ALAT_PUBLICKEY_ID', 'ALAT_PUBLICKEY_KEY', 'ALAT_PUBLIC_KEY', 'ALAT_API_KEY', 'ALAT_APIKEY',
+  // AlatPay Business ID variants
+  'ALATPAY_BUSINESS_ID', 'ALATPAY_BUSINESSID', 'ALAT_BUSINESS_ID', 'ALAT_BUSINESSID', 'ALAT_BID', 'ALAT_BUSINESS',
+  // AlatPay Secret Key variants
+  'ALATPAY_SECRET_KEY', 'ALATPAY_SECRETKEY', 'ALAT_SECRET_KEY', 'ALAT_SECRETKEY', 'ALAT_SECRET', 'ALAT_SECRET_K'
+];
+const foundEnvVars = envVarsToCheck.filter(name => !!process.env[name]);
+if (foundEnvVars.length > 0) {
+  console.log("🔧 Found payment env vars:", foundEnvVars.join(', '));
+} else {
+  console.log("⚠️ No payment env vars found! Please ensure these are set in your environment:");
+  console.log("   For Fincra: FINCRA_SECRET_KEY (or FINCRA_SECRET), FINCRA_PUBLIC_KEY");
+  console.log("   For AlatPay: ALATPAY_API_KEY (or ALAT_PUBLICKEY), ALATPAY_BUSINESS_ID (or ALAT_BUSINESS_ID), ALATPAY_SECRET_KEY (or ALAT_SECRET_KEY)");
+}
+
+// Alat Pay Configuration - supports multiple env var naming conventions from Render
+// API Key (Public Key) - used for frontend Web Plugin - checking various naming patterns
+const ALATPAY_API_KEY = 
+  process.env.ALATPAY_API_KEY || 
+  process.env.ALATPAY_PUBLIC_KEY || 
+  process.env.ALAT_PUBLICKEY || 
+  process.env.ALAT_PUBLICKEY_ID ||
+  process.env.ALAT_PUBLICKEY_KEY ||
+  process.env.ALAT_PUBLIC_KEY || 
+  process.env.ALAT_API_KEY || 
+  process.env.ALAT_APIKEY;
+
+// Business ID - checking various naming patterns
+const ALATPAY_BUSINESS_ID = 
+  process.env.ALATPAY_BUSINESS_ID || 
+  process.env.ALATPAY_BUSINESSID || 
+  process.env.ALAT_BUSINESS_ID || 
+  process.env.ALAT_BUSINESSID || 
+  process.env.ALAT_BID ||
+  process.env.ALAT_BUSINESS;
+
+// Secret Key - used for backend API calls (Ocp-Apim-Subscription-Key header)
+const ALATPAY_SECRET_KEY = 
+  process.env.ALATPAY_SECRET_KEY || 
+  process.env.ALATPAY_SECRETKEY || 
+  process.env.ALAT_SECRET_KEY || 
+  process.env.ALAT_SECRETKEY || 
+  process.env.ALAT_SECRET ||
+  process.env.ALAT_SECRET_K;
+
+// Webhook Secret - used for validating webhook signatures (can also use the secret key as fallback)
+const ALATPAY_WEBHOOK_SECRET = process.env.ALATPAY_WEBHOOK_SECRET || process.env.ALAT_WEBHOOK_SECRET || ALATPAY_SECRET_KEY;
+
+// Debug logging for AlatPay configuration (only logs presence, not values)
+console.log("🔧 AlatPay Config Check - API_KEY:", !!ALATPAY_API_KEY, "BUSINESS_ID:", !!ALATPAY_BUSINESS_ID, "SECRET_KEY:", !!ALATPAY_SECRET_KEY);
 
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
@@ -908,10 +964,10 @@ router.post("/fincra/create-checkout", async (req, res) => {
       checkoutData,
       {
         headers: {
-          "accept": "application/json",
-          "api-key": FINCRA_SECRET_KEY,
-          "x-pub-key": FINCRA_PUBLIC_KEY,
+          "Accept": "application/json",
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${FINCRA_SECRET_KEY}`,
+          "x-public-key": FINCRA_PUBLIC_KEY,
         },
       }
     );
