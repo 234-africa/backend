@@ -15,14 +15,16 @@ const PromoCode = require("../models/promoCode");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY;
-const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY;
-const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET;
 
-// Alat Pay Configuration
-const ALATPAY_API_KEY = process.env.ALATPAY_API_KEY;
-const ALATPAY_BUSINESS_ID = process.env.ALATPAY_BUSINESS_ID;
-const ALATPAY_WEBHOOK_SECRET = process.env.ALATPAY_WEBHOOK_SECRET;
+// Fincra Configuration - supports multiple env var naming conventions
+const FINCRA_SECRET_KEY = process.env.FINCRA_SECRET_KEY || process.env.FINCRA_SECRET;
+const FINCRA_PUBLIC_KEY = process.env.FINCRA_PUBLIC_KEY || process.env.FINCRA_PUBLICKEY;
+const FINCRA_WEBHOOK_SECRET = process.env.FINCRA_WEBHOOK_SECRET || process.env.FINCRA_WEBHOOK;
+
+// Alat Pay Configuration - supports multiple env var naming conventions
+const ALATPAY_API_KEY = process.env.ALATPAY_API_KEY || process.env.ALAT_PUBLICKEY || process.env.ALAT_API_KEY;
+const ALATPAY_BUSINESS_ID = process.env.ALATPAY_BUSINESS_ID || process.env.ALAT_BUSINESS_ID || process.env.ALAT_BUSINESSID;
+const ALATPAY_WEBHOOK_SECRET = process.env.ALATPAY_WEBHOOK_SECRET || process.env.ALAT_SECRET_KEY || process.env.ALAT_WEBHOOK_SECRET;
 
 // ✅ Helper function for async email sending with retry logic
 async function sendEmailAsync(mailOptions, retries = 3) {
