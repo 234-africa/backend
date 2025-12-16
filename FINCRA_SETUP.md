@@ -56,11 +56,26 @@ Add these variables to your backend `.env` file:
 FINCRA_SECRET_KEY=sk_test_your_secret_key_here
 FINCRA_PUBLIC_KEY=pk_test_your_public_key_here
 FINCRA_WEBHOOK_SECRET=your_webhook_encryption_key_here
+
+# Optional: Explicitly set live mode (auto-detected from NODE_ENV in production)
+# FINCRA_LIVE_MODE=true
 ```
+
+**Alternative Environment Variable Names Supported:**
+- `FINCRA_SECRET` (alias for FINCRA_SECRET_KEY)
+- `FINCRA_PUBLIC_KEY` (standard)
+- `FINCRA_WEBHOOK_KEY` (alias for FINCRA_WEBHOOK_SECRET)
+
+**Environment Detection:**
+The system automatically detects whether to use Live or Sandbox API based on:
+1. `FINCRA_LIVE_MODE=true` environment variable (explicit override)
+2. `NODE_ENV=production` (automatic in production environments like Render)
+3. Key patterns (keys without 'test' or 'sandbox' are treated as live)
 
 **Important**: 
 - Use `sk_test_` and `pk_test_` keys for development/testing
 - Use `sk_live_` and `pk_live_` keys for production
+- If your live keys don't follow the `sk_live_`/`pk_live_` pattern, ensure `NODE_ENV=production` is set
 - Never commit these keys to version control
 
 ### 3. Configure Webhook URL
