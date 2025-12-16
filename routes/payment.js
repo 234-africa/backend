@@ -30,8 +30,8 @@ const envVarsToCheck = [
   'FINCRA_SECRET_KEY', 'FINCRA_SECRET', 'FINCRA_SECRETKEY',
   'FINCRA_PUBLIC_KEY', 'FINCRA_PUBLICKEY', 'FINCRA_PUBLIC',
   'FINCRA_WEBHOOK_SECRET', 'FINCRA_WEBHOOK', 'FINCRA_WEBHOOK_KEY',
-  // AlatPay API Key variants
-  'ALATPAY_API_KEY', 'ALATPAY_PUBLIC_KEY', 'ALAT_PUBLICKEY', 'ALAT_PUBLICKEY_ID', 'ALAT_PUBLICKEY_KEY', 'ALAT_PUBLIC_KEY', 'ALAT_API_KEY', 'ALAT_APIKEY',
+  // AlatPay API Key variants (includes ALAT_PUBLUICKEY typo variant)
+  'ALATPAY_API_KEY', 'ALATPAY_PUBLIC_KEY', 'ALAT_PUBLUICKEY', 'ALAT_PUBLICKEY', 'ALAT_PUBLICKEY_ID', 'ALAT_PUBLICKEY_KEY', 'ALAT_PUBLIC_KEY', 'ALAT_API_KEY', 'ALAT_APIKEY',
   // AlatPay Business ID variants
   'ALATPAY_BUSINESS_ID', 'ALATPAY_BUSINESSID', 'ALAT_BUSINESS_ID', 'ALAT_BUSINESSID', 'ALAT_BID', 'ALAT_BUSINESS',
   // AlatPay Secret Key variants
@@ -51,6 +51,7 @@ if (foundEnvVars.length > 0) {
 const ALATPAY_API_KEY = 
   process.env.ALATPAY_API_KEY || 
   process.env.ALATPAY_PUBLIC_KEY || 
+  process.env.ALAT_PUBLUICKEY ||  // Note: handles common typo "PUBLUICKEY"
   process.env.ALAT_PUBLICKEY || 
   process.env.ALAT_PUBLICKEY_ID ||
   process.env.ALAT_PUBLICKEY_KEY ||
@@ -966,8 +967,8 @@ router.post("/fincra/create-checkout", async (req, res) => {
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${FINCRA_SECRET_KEY}`,
-          "x-public-key": FINCRA_PUBLIC_KEY,
+          "api-key": FINCRA_SECRET_KEY,
+          "x-pub-key": FINCRA_PUBLIC_KEY,
         },
       }
     );
