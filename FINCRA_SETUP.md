@@ -1,25 +1,26 @@
 # Fincra Payment Gateway Setup Guide
 
 ## Overview
-Fincra has been integrated as the third payment method alongside Paystack and Stripe. Fincra supports multiple African currencies and payment methods including cards, bank transfers, and mobile money.
+Fincra has been integrated using the official Checkout Redirect API per https://docs.fincra.com/docs/checkout-redirect
 
 ## Supported Currencies
-Fincra supports the following currencies:
-- **NGN** - Nigerian Naira
-- **GHS** - Ghanaian Cedi
-- **KES** - Kenyan Shilling
-- **UGX** - Ugandan Shilling
-- **ZMW** - Zambian Kwacha
-- **ZAR** - South African Rand
-- **USD** - US Dollar
-- **GBP** - British Pound
-- **EUR** - Euro
+Per https://docs.fincra.com/docs/checkout-redirect:
+- **NGN** - Nigerian Naira (bank_transfer, card, payAttitude)
+- **GHS** - Ghanaian Cedi (mobile_money, bank_transfer)
+- **KES** - Kenyan Shilling (mobile_money)
+- **UGX** - Ugandan Shilling (mobile_money)
+- **ZMW** - Zambian Kwacha (mobile_money, card)
+- **ZAR** - South African Rand (bank_transfer, card)
+- **USD** - US Dollar (card)
+- **TZS** - Tanzanian Shilling (mobile_money)
+- **XAF** - CFA Franc BEAC (mobile_money)
+- **XOF** - CFA Franc BCEAO (mobile_money)
 
 ## Payment Method Selection Logic
-The system automatically selects the appropriate payment gateway based on currency:
-- **Paystack**: NGN, GHS
-- **Fincra**: USD, GBP, EUR, KES, UGX, ZMW, ZAR
-- **Stripe**: Fallback for any other unsupported currencies
+Per official documentation, the system selects payment gateways based on currency:
+- **Paystack**: NGN only
+- **AlatPay**: NGN, USD (https://docs.alatpay.ng/web-plugin)
+- **Fincra**: NGN, GHS, KES, UGX, ZMW, ZAR, USD, TZS, XAF, XOF (https://docs.fincra.com/docs/checkout-redirect)
 
 Note: The gateway selection logic is implemented in `frontend/src/helpers/currency.js`.
 
@@ -190,15 +191,20 @@ Headers:
 
 ## Support & Documentation
 
-- **Fincra Documentation**: https://docs.fincra.com
-- **API Reference**: https://docs.fincra.com/docs/api-environments
-- **Support Email**: [email protected]
+- **Getting Started**: https://docs.fincra.com/docs/getting-started
+- **API Environments**: https://docs.fincra.com/docs/api-environments
+- **Authentication**: https://docs.fincra.com/docs/authentication
+- **Checkout Redirect**: https://docs.fincra.com/docs/checkout-redirect
+- **Checkout Standard**: https://docs.fincra.com/docs/checkout-standard
+- **Webhook Setup**: https://docs.fincra.com/docs/setup-webhook
+- **Webhook Validation**: https://docs.fincra.com/docs/validating-webhook
+- **Payin Webhooks**: https://docs.fincra.com/docs/payin-webhook
 - **Test Cards**: https://docs.fincra.com/docs/test-cards
 
 ## Security Best Practices
 
 1. **Never expose secret keys** in frontend code or version control
-2. **Always validate webhook signatures** before processing
+2. **Always validate webhook signatures** before processing (HMAC-SHA512, hex encoded)
 3. **Use HTTPS** for all webhook URLs in production
 4. **Implement idempotency** checks to prevent duplicate orders
 5. **Monitor failed webhooks** and implement retry logic
