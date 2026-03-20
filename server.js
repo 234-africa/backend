@@ -1,9 +1,11 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const passport = require("passport");
-const dotenv = require("dotenv");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
@@ -13,7 +15,6 @@ const { runCleanups } =  require("./routes/cron");
 // Load passport config
 require("./auth");
 
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
