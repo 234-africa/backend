@@ -34,10 +34,13 @@ router.post("/apply-promo", async (req, res) => {
     }
 
     // 4. Check if product is eligible for the promo (compare as string)
-    const isProductEligible = promo.products.some(
-      (productId) => String(productId) === id
-    );
-    console.log(isProductEligible);
+    // If promo.products is empty, it applies to all products
+    const isProductEligible =
+      !promo.products || promo.products.length === 0 ||
+      promo.products.some(
+        (productId) => String(productId) === String(id)
+      );
+    console.log("Product eligibility check - id:", id, "eligible:", isProductEligible);
 
     if (!isProductEligible) {
       return res
@@ -70,12 +73,12 @@ const responsePayload = {
   success: true,
   discount,
   newTotal,
-  discountType: promo.discountType, // 👈 include type
-  discountValue: promo.discountValue, // 👈 include value
+  discountType: promo.discountType, // 馃憟 include type
+  discountValue: promo.discountValue, // 馃憟 include value
   message: "Promo code applied successfully",
 };
 
-// ✅ log it before sending
+// 鉁� log it before sending
 console.log("Promo Response Payload:", responsePayload);
 
 return res.json(responsePayload);
@@ -86,7 +89,7 @@ return res.json(responsePayload);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
-// ✅ Create new promo code
+// 鉁� Create new promo code
 router.post("/create-promo", verifyToken, async (req, res) => {
   try {
     let promo = new promoCode();
@@ -97,7 +100,7 @@ router.post("/create-promo", verifyToken, async (req, res) => {
     promo.expiryDate = req.body.expiryDate;
     promo.usageLimit = req.body.usageLimit || 0;
     promo.minOrderAmount = req.body.minOrderAmount || 0;
-    promo.userId = req.decoded._id; // ✅ just like your Bank route
+    promo.userId = req.decoded._id; // 鉁� just like your Bank route
     promo.products = req.body.products || [];
 
     // 1. Check if code already exists
