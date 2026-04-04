@@ -33,6 +33,13 @@ router.post("/apply-promo", async (req, res) => {
         .json({ success: false, message: "Promo code usage limit reached" });
     }
 
+    // 3b. Check minimum order amount
+    if (promo.minOrderAmount > 0 && orderTotal < promo.minOrderAmount) {
+      return res
+        .status(400)
+        .json({ success: false, message: `Minimum order amount of ${promo.minOrderAmount} required for this promo code` });
+    }
+
     // 4. Check if product is eligible for the promo (compare as string)
     // If promo.products is empty, it applies to all products
     const isProductEligible =
@@ -73,12 +80,12 @@ const responsePayload = {
   success: true,
   discount,
   newTotal,
-  discountType: promo.discountType, // 馃憟 include type
-  discountValue: promo.discountValue, // 馃憟 include value
+  discountType: promo.discountType, // 👈 include type
+  discountValue: promo.discountValue, // 👈 include value
   message: "Promo code applied successfully",
 };
 
-// 鉁� log it before sending
+// ✅ log it before sending
 console.log("Promo Response Payload:", responsePayload);
 
 return res.json(responsePayload);
@@ -89,7 +96,7 @@ return res.json(responsePayload);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
-// 鉁� Create new promo code
+// ✅ Create new promo code
 router.post("/create-promo", verifyToken, async (req, res) => {
   try {
     let promo = new promoCode();
@@ -100,7 +107,7 @@ router.post("/create-promo", verifyToken, async (req, res) => {
     promo.expiryDate = req.body.expiryDate;
     promo.usageLimit = req.body.usageLimit || 0;
     promo.minOrderAmount = req.body.minOrderAmount || 0;
-    promo.userId = req.decoded._id; // 鉁� just like your Bank route
+    promo.userId = req.decoded._id; // ✅ just like your Bank route
     promo.products = req.body.products || [];
 
     // 1. Check if code already exists
