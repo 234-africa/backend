@@ -1188,9 +1188,13 @@ const alatpayWebhookHandler = async (req, res) => {
       event.status === "successful";
     
     if (isSuccessful) {
-      const reference = webhookData.Id || webhookData.id || webhookData.OrderId || webhookData.orderId;
+      // AlatPay sends its own system transaction ID (e.g. UUID like 91358928-...) as Id/OrderId.
+      // The merchant reference we generated (ALAT-...) is embedded in metadata.orderId.
+      // We must use the merchant reference for idempotency so it matches the order
+      // already created by the frontend's onTransaction callback.
+      const alatSystemId = webhookData.Id || webhookData.id || webhookData.OrderId || webhookData.orderId;
       
-      console.log(`✅ Alat Pay webhook received for reference: ${reference}`);
+      console.log(`✅ Alat Pay webhook received for system ID: ${alatSystemId}`);
       
       // Respond immediately
       res.sendStatus(200);
@@ -1198,13 +1202,6 @@ const alatpayWebhookHandler = async (req, res) => {
       // Process order asynchronously
       setImmediate(async () => {
         try {
-          const existingOrder = await Order.findOne({ reference });
-          
-          if (existingOrder) {
-            console.log(`✅ Order already exists for Alat Pay payment: ${reference}`);
-            return;
-          }
-          
           // Parse metadata from customer field if present
           let orderMetadata = null;
           const customerData = webhookData.Customer || webhookData.customer;
@@ -1215,6 +1212,21 @@ const alatpayWebhookHandler = async (req, res) => {
             } catch (e) {
               console.log("⚠️ Could not parse Alat Pay metadata:", e.message);
             }
+          }
+
+          // Prefer merchant-generated reference (ALAT-...) from metadata so it matches
+          // the order already created by the frontend's onTransaction callback.
+          // Fall back to AlatPay's system ID only if merchant reference is unavailable.
+          const merchantReference = orderMetadata?.orderId || alatSystemId;
+          const reference = merchantReference;
+          
+          console.log(`✅ Alat Pay using reference for idempotency: ${reference}`);
+          
+          const existingOrder = await Order.findOne({ reference });
+          
+          if (existingOrder) {
+            console.log(`✅ Order already exists for Alat Pay payment (ref: ${reference}) — skipping duplicate creation.`);
+            return;
           }
           
           if (orderMetadata && orderMetadata.orderData) {
